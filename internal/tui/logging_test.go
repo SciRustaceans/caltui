@@ -116,6 +116,33 @@ func TestQuickAddFlow(t *testing.T) {
 	}
 }
 
+func TestNewCustomFoodFlow(t *testing.T) {
+	s := testStore(t)
+	sm := newSearchModal(s, "2026-06-06", domain.Breakfast, nil)
+	sm.focus()
+
+	sm.Update(press("ctrl+f"))
+	if sm.step != stepNewFood {
+		t.Fatalf("expected new-food step, got %d", sm.step)
+	}
+	typeStr(sm, "Granola")  // Name (field 0)
+	sm.Update(press("tab")) // -> Cal/100g
+	typeStr(sm, "450")
+	// advance through protein/carbs/fat/serving, then submit on the last field.
+	for i := 0; i < 5; i++ {
+		sm.Update(press("enter"))
+	}
+	if sm.step != stepDetail {
+		t.Fatalf("after create, expected detail step, got %d", sm.step)
+	}
+	if sm.food == nil || sm.food.ID == 0 || sm.food.Source != domain.SourceCustom {
+		t.Errorf("created food not wired into detail: %+v", sm.food)
+	}
+	if got, _ := s.SearchFoods("granola", 5); len(got) == 0 {
+		t.Error("custom food should be saved and offline-searchable")
+	}
+}
+
 func TestRootSaveAndDeleteWiring(t *testing.T) {
 	s := testStore(t)
 	m := NewForDate(s, "2026-06-06")

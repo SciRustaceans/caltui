@@ -44,18 +44,21 @@ func TestOnlineResultsMergeAndCache(t *testing.T) {
 		t.Error("searching flag should clear after results arrive")
 	}
 
-	list := sm.activeList()
+	rows := sm.rows()
 	var haveOffline, haveOnline bool
-	for _, f := range list {
-		if f.Name == "Cheese, cheddar" {
+	for _, r := range rows {
+		if r.food == nil {
+			continue
+		}
+		if r.food.Name == "Cheese, cheddar" {
 			haveOffline = true
 		}
-		if f.Name == "Cheez-It" {
+		if r.food.Name == "Cheez-It" {
 			haveOnline = true
 		}
 	}
 	if !haveOffline || !haveOnline {
-		t.Errorf("merged list missing entries (offline=%v online=%v): %d items", haveOffline, haveOnline, len(list))
+		t.Errorf("merged list missing entries (offline=%v online=%v): %d rows", haveOffline, haveOnline, len(rows))
 	}
 
 	// Picking the online result caches it locally (gets a real id).

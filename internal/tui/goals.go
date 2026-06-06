@@ -62,8 +62,51 @@ func (m *Model) viewGoals(_ int) string {
 		b.WriteString("\n" + styleDim.Render(fmt.Sprintf("Based on: %s · %dy · %scm · %skg · %s · %s",
 			g.Sex, age, trimNum(g.HeightCm), trimNum(g.WeightKg), g.Activity.Label(), rate)) + "\n")
 	}
+	if est, ok := nutrition.EstimateMaintenance(m.intakeByDay, m.weights, m.today, nutrition.MaintenanceWindowDays); ok {
+		line := fmt.Sprintf("Est. maintenance (last %dd): ~%s kcal", nutrition.MaintenanceWindowDays, fmtInt(est))
+		if !g.Manual && g.WeightKg > 0 && g.Activity.Valid() {
+			age, _ := nutrition.AgeFromDate(g.BirthDate, time.Now())
+			tdee := nutrition.TDEE(nutrition.BMR(g.Sex, g.WeightKg, g.HeightCm, age), g.Activity)
+			line += fmt.Sprintf(" · formula: %s", fmtInt(tdee))
+		}
+		b.WriteString("\n" + styleText.Render(line) + "\n")
+		b.WriteString(styleFaint.Render("m: set goal from this estimate") + "\n")
+	}
+
 	b.WriteString("\n" + styleFaint.Render("a re-run wizard · e edit manually"))
 	return b.String()
+}
+
+// applyMaintenance rebuilds the goal using the measured maintenance estimate as
+// the TDEE, keeping the current goal's weekly rate.
+func (m Model) applyMaintenance() (tea.Model, tea.Cmd) {
+	est, ok := nutrition.EstimateMaintenance(m.intakeByDay, m.weights, m.today, nutrition.MaintenanceWindowDays)
+	if !ok || !m.hasGoal {
+		return m, nil
+	}
+	cur := m.goal
+	target := nutrition.CalorieTarget(est, cur.GoalRate)
+	weight := cur.WeightKg
+	if weight <= 0 && len(m.weights) > 0 {
+		weight = m.weights[len(m.weights)-1].Kg
+	}
+	var macros domain.Macros
+	if weight > 0 {
+		macros = nutrition.DefaultMacroSplit(target.Kcal, weight).Macros
+	} else {
+		macros = nutrition.MacroSplitPercent(target.Kcal, nutrition.DefaultProteinPct, nutrition.DefaultCarbsPct, nutrition.DefaultFatPct)
+	}
+	goal := domain.Goal{
+		EffectiveDate: m.today,
+		Target:        macros.Round(),
+		Sex:           cur.Sex,
+		BirthDate:     cur.BirthDate,
+		HeightCm:      cur.HeightCm,
+		WeightKg:      weight,
+		Activity:      cur.Activity,
+		GoalRate:      cur.GoalRate,
+	}
+	return m, m.saveGoalCmd(goal)
 }
 
 // openWizard opens the TDEE setup wizard, prefilled from the current goal.

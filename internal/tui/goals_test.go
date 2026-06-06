@@ -156,6 +156,49 @@ func TestDashboardReflectsGoalUpdate(t *testing.T) {
 	}
 }
 
+func TestApplyMaintenance(t *testing.T) {
+	s := testStore(t)
+	m := New(s, nil)
+	date := m.today
+	now := time.Now()
+	tt, _ := time.Parse("2006-01-02", date)
+
+	m.goal = domain.Goal{
+		EffectiveDate: date, Target: domain.Macros{Kcal: 2200},
+		Sex: domain.Male, BirthDate: nutrition.BirthDateForAge(30, now),
+		HeightCm: 180, WeightKg: 80, Activity: domain.ModeratelyActive, GoalRate: -0.5,
+	}
+	m.hasGoal = true
+	m.intakeByDay = map[string]float64{}
+	for i := 0; i < 21; i++ {
+		m.intakeByDay[tt.AddDate(0, 0, -i).Format("2006-01-02")] = 2000
+	}
+	m.weights = []domain.Weight{
+		{Date: tt.AddDate(0, 0, -14).Format("2006-01-02"), Kg: 82, Unit: "kg"},
+		{Date: date, Kg: 81, Unit: "kg"},
+	}
+
+	_, cmd := m.applyMaintenance()
+	if cmd == nil {
+		t.Fatal("applyMaintenance produced no command")
+	}
+	if d, ok := cmd().(mutationDoneMsg); !ok || d.err != nil {
+		t.Fatalf("apply failed: %+v", d)
+	}
+
+	// est maintenance = 2000 - (-1*7700/14) = 2550; target at -0.5 = 2000.
+	want := nutrition.CalorieTarget(2550, -0.5).Kcal
+	g, _, _ := s.CurrentGoal(date)
+	if math.Abs(g.Target.Kcal-math.Round(want)) > 1 {
+		t.Errorf("applied target = %g, want ~%g", g.Target.Kcal, math.Round(want))
+	}
+
+	// Goals view surfaces the estimate.
+	if !strings.Contains(m.viewGoals(100), "Est. maintenance") {
+		t.Error("goals view should show the maintenance estimate when data is sufficient")
+	}
+}
+
 func TestGoalsView(t *testing.T) {
 	m := sampleModel()
 	m.active = tabGoals

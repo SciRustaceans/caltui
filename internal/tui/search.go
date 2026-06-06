@@ -29,6 +29,7 @@ const (
 	stepSearch = iota
 	stepDetail
 	stepQuick
+	stepNewFood
 )
 
 // searchResultsMsg delivers async food-search results, tagged with a generation
@@ -54,6 +55,7 @@ type searchModal struct {
 	online        food.Provider
 	searching     bool
 	recent        []domain.Food
+	savedMeals    []domain.SavedMeal
 	cursor        int
 	gen           int
 
@@ -71,6 +73,9 @@ type searchModal struct {
 
 	// quick-add step
 	quick form
+
+	// new-custom-food step
+	newFood form
 }
 
 // newSearchModal opens the add flow at the search step.
@@ -140,6 +145,8 @@ func (sm *searchModal) Update(msg tea.Msg) (modalModel, tea.Cmd) {
 			return sm.updateDetail(msg)
 		case stepQuick:
 			return sm.updateQuick(msg)
+		case stepNewFood:
+			return sm.updateNewFood(msg)
 		}
 	}
 	return sm, nil
@@ -147,22 +154,42 @@ func (sm *searchModal) Update(msg tea.Msg) (modalModel, tea.Cmd) {
 
 // --- search step ---
 
-func (sm *searchModal) activeList() []domain.Food {
+// pickRow is one selectable row in the search list: either a food or a saved
+// meal.
+type pickRow struct {
+	food *domain.Food
+	meal *domain.SavedMeal
+}
+
+// rows returns the current selectable list: with a blank query, saved meals
+// (recipes) then recent foods; otherwise offline results followed by online
+// results not already present offline (by name).
+func (sm *searchModal) rows() []pickRow {
 	if strings.TrimSpace(sm.query.Value()) == "" {
-		return sm.recent
+		rows := make([]pickRow, 0, len(sm.savedMeals)+len(sm.recent))
+		for i := range sm.savedMeals {
+			rows = append(rows, pickRow{meal: &sm.savedMeals[i]})
+		}
+		for i := range sm.recent {
+			rows = append(rows, pickRow{food: &sm.recent[i]})
+		}
+		return rows
 	}
-	// Offline first, then online results not already present offline (by name).
-	list := append([]domain.Food{}, sm.results...)
+	foods := append([]domain.Food{}, sm.results...)
 	seen := make(map[string]bool, len(sm.results))
 	for _, f := range sm.results {
 		seen[strings.ToLower(f.Name)] = true
 	}
 	for _, f := range sm.onlineResults {
 		if !seen[strings.ToLower(f.Name)] {
-			list = append(list, f)
+			foods = append(foods, f)
 		}
 	}
-	return list
+	rows := make([]pickRow, 0, len(foods))
+	for i := range foods {
+		rows = append(rows, pickRow{food: &foods[i]})
+	}
+	return rows
 }
 
 func (sm *searchModal) onlineDebounceCmd() tea.Cmd {
@@ -184,7 +211,7 @@ func (sm *searchModal) onlineSearchCmd() tea.Cmd {
 }
 
 func (sm *searchModal) clampCursor() {
-	n := len(sm.activeList())
+	n := len(sm.rows())
 	if sm.cursor >= n {
 		sm.cursor = n - 1
 	}
@@ -214,13 +241,29 @@ func (sm *searchModal) updateSearch(msg tea.KeyPressMsg) (modalModel, tea.Cmd) {
 		sm.clampCursor()
 		return sm, nil
 	case "enter":
-		list := sm.activeList()
-		if len(list) > 0 && sm.cursor < len(list) {
-			return sm, sm.pickFood(list[sm.cursor])
+		rows := sm.rows()
+		if sm.cursor >= 0 && sm.cursor < len(rows) {
+			r := rows[sm.cursor]
+			if r.meal != nil {
+				id := r.meal.ID
+				return sm, func() tea.Msg { return logSavedMealMsg{id: id, meal: sm.meal} }
+			}
+			if r.food != nil {
+				return sm, sm.pickFood(*r.food)
+			}
+		}
+		return sm, nil
+	case "ctrl+d":
+		rows := sm.rows()
+		if sm.cursor >= 0 && sm.cursor < len(rows) && rows[sm.cursor].meal != nil {
+			id := rows[sm.cursor].meal.ID
+			return sm, func() tea.Msg { return deleteSavedMealMsg{id: id} }
 		}
 		return sm, nil
 	case "ctrl+a":
 		return sm.startQuick()
+	case "ctrl+f":
+		return sm.startNewFood()
 	default:
 		prev := sm.query.Value()
 		var cmd tea.Cmd
@@ -440,6 +483,77 @@ func (sm *searchModal) submitQuick() (modalModel, tea.Cmd) {
 		PerUnit: macros, Quantity: 1, Unit: domain.UnitServing,
 	}
 	return sm, func() tea.Msg { return saveEntryMsg{entry: entry} }
+}
+
+// --- new-custom-food step ---
+
+func (sm *searchModal) startNewFood() (modalModel, tea.Cmd) {
+	sm.newFood = newForm(
+		fieldSpec{label: "Name", placeholder: "e.g. Homemade granola", value: strings.TrimSpace(sm.query.Value()), width: 24, charLimit: 60},
+		fieldSpec{label: "Cal /100g", placeholder: "kcal", width: 8, charLimit: 6},
+		fieldSpec{label: "Protein /100g", width: 8, charLimit: 6},
+		fieldSpec{label: "Carbs /100g", width: 8, charLimit: 6},
+		fieldSpec{label: "Fat /100g", width: 8, charLimit: 6},
+		fieldSpec{label: "Serving g", placeholder: "optional", width: 8, charLimit: 6},
+	)
+	sm.step = stepNewFood
+	sm.msg = ""
+	return sm, sm.newFood.Focus()
+}
+
+func (sm *searchModal) updateNewFood(msg tea.KeyPressMsg) (modalModel, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		sm.step = stepSearch
+		return sm, sm.query.Focus()
+	case "tab":
+		return sm, sm.newFood.Next()
+	case "shift+tab":
+		return sm, sm.newFood.Prev()
+	case "enter":
+		if !sm.newFood.AtLast() {
+			return sm, sm.newFood.Next()
+		}
+		return sm.submitNewFood()
+	default:
+		return sm, sm.newFood.Update(msg)
+	}
+}
+
+func (sm *searchModal) submitNewFood() (modalModel, tea.Cmd) {
+	name := sm.newFood.Value(0)
+	if name == "" {
+		name = "Custom food"
+	}
+	macros := domain.Macros{
+		Kcal:    parseF(sm.newFood.Value(1)),
+		Protein: parseF(sm.newFood.Value(2)),
+		Carbs:   parseF(sm.newFood.Value(3)),
+		Fat:     parseF(sm.newFood.Value(4)),
+	}
+	if macros.Kcal <= 0 {
+		macros.Kcal = macros.ComputedKcal()
+	}
+	if macros.Kcal <= 0 {
+		sm.msg = "Enter calories or macros."
+		return sm, nil
+	}
+	f := domain.Food{Source: domain.SourceCustom, Name: name, Per100g: macros}
+	if serving := parseF(sm.newFood.Value(5)); serving > 0 {
+		f.ServingSize = serving
+		f.ServingUnit = domain.UnitGram
+		f.Household = "1 serving (" + fmtQty(serving) + " g)"
+	}
+	if sm.store != nil {
+		id, err := sm.store.InsertFood(f)
+		if err != nil {
+			sm.msg = err.Error()
+			return sm, nil
+		}
+		f.ID = id
+	}
+	// Saved & reusable — flow straight into logging it now.
+	return sm, sm.pickFood(f)
 }
 
 func parseF(s string) float64 {

@@ -105,3 +105,34 @@ func TestWeightPaceUpdatesDashboardE2E(t *testing.T) {
 func contains(s string) func([]byte) bool {
 	return func(b []byte) bool { return bytes.Contains(b, []byte(s)) }
 }
+
+// TestLogSavedMealE2E drives the real flow: open the food search, pick a saved
+// meal, and confirm its calories land on the dashboard.
+func TestLogSavedMealE2E(t *testing.T) {
+	s := testStore(t)
+	today := time.Now().Format("2006-01-02")
+	if _, err := s.AddGoal(domain.Goal{EffectiveDate: today, Target: domain.Macros{Kcal: 2000}, Manual: true}); err != nil {
+		t.Fatal(err)
+	}
+	// Saved meal totalling 525 kcal (200*1.65 + 150*1.30).
+	if _, err := s.AddSavedMeal(domain.SavedMeal{Name: "Usual lunch", Items: []domain.SavedMealItem{
+		{Name: "Chicken", PerUnit: domain.Macros{Kcal: 1.65}, Quantity: 200, Unit: domain.UnitGram},
+		{Name: "Rice", PerUnit: domain.Macros{Kcal: 1.30}, Quantity: 150, Unit: domain.UnitGram},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+
+	tm := teatest.NewTestModel(t, New(s, nil), teatest.WithInitialTermSize(120, 32))
+	out := tm.Output()
+	teatest.WaitFor(t, out, contains("Dashboard"), teatest.WithDuration(5*time.Second))
+
+	tm.Send(press("a")) // open food search (saved meals listed first on blank query)
+	teatest.WaitFor(t, out, contains("Usual lunch"), teatest.WithDuration(5*time.Second))
+	tm.Send(press("enter")) // log the saved meal
+
+	// Dashboard calorie total reflects the logged 525 kcal.
+	teatest.WaitFor(t, out, contains("525"), teatest.WithDuration(5*time.Second))
+
+	tm.Send(press("q"))
+	tm.WaitFinished(t, teatest.WithFinalTimeout(5*time.Second))
+}

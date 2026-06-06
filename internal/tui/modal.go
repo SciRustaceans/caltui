@@ -30,6 +30,14 @@ type saveGoalMsg struct{ goal domain.Goal }
 type saveWeightMsg struct{ weight domain.Weight }
 type saveWeightGoalMsg struct{ goal domain.WeightGoal }
 
+// Saved-meal messages.
+type saveMealMsg struct{ meal domain.SavedMeal }
+type logSavedMealMsg struct {
+	id   int64
+	meal domain.Meal
+}
+type deleteSavedMealMsg struct{ id int64 }
+
 // mutationDoneMsg signals a store mutation finished; the root closes any modal,
 // records an error, and reloads the day.
 type mutationDoneMsg struct{ err error }
@@ -117,6 +125,30 @@ func recalcCalorieGoal(cur domain.Goal, hasGoal bool, rate, latestKg float64, to
 		Activity:      cur.Activity,
 		GoalRate:      rate,
 	}, true
+}
+
+// saveMealCmd persists a new saved meal/recipe.
+func (m Model) saveMealCmd(sm domain.SavedMeal) tea.Cmd {
+	s := m.store
+	return func() tea.Msg {
+		_, err := s.AddSavedMeal(sm)
+		return mutationDoneMsg{err: err}
+	}
+}
+
+// logSavedMealCmd logs all items of a saved meal into the day.
+func (m Model) logSavedMealCmd(id int64, meal domain.Meal) tea.Cmd {
+	s, date := m.store, m.today
+	return func() tea.Msg {
+		_, err := s.LogSavedMeal(id, date, meal)
+		return mutationDoneMsg{err: err}
+	}
+}
+
+// deleteSavedMealCmd removes a saved meal.
+func (m Model) deleteSavedMealCmd(id int64) tea.Cmd {
+	s := m.store
+	return func() tea.Msg { return mutationDoneMsg{err: s.DeleteSavedMeal(id)} }
 }
 
 // deleteEntryCmd removes a diary entry.

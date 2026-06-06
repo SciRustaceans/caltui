@@ -16,6 +16,7 @@ import (
 
 	"caltui/internal/domain"
 	"caltui/internal/food"
+	"caltui/internal/nutrition"
 	"caltui/internal/store"
 	"caltui/internal/tui/keys"
 )
@@ -57,6 +58,8 @@ type Model struct {
 	weights       []domain.Weight
 	weightGoal    domain.WeightGoal
 	hasWeightGoal bool
+	intakeByDay   map[string]float64 // recent daily calories, for the maintenance estimate
+	savedMeals    []domain.SavedMeal
 
 	diaryCursor  int
 	modal        modalModel
@@ -99,6 +102,8 @@ type dayLoadedMsg struct {
 	weights       []domain.Weight
 	weightGoal    domain.WeightGoal
 	hasWeightGoal bool
+	intakeByDay   map[string]float64
+	savedMeals    []domain.SavedMeal
 
 	err error
 }
@@ -139,6 +144,17 @@ func (m Model) loadDay() tea.Cmd {
 			return msg
 		}
 		if msg.weightGoal, msg.hasWeightGoal, err = s.GetWeightGoal(); err != nil {
+			msg.err = err
+			return msg
+		}
+		if t, e := time.Parse("2006-01-02", date); e == nil {
+			from := t.AddDate(0, 0, -(nutrition.MaintenanceWindowDays - 1)).Format("2006-01-02")
+			if msg.intakeByDay, err = s.CalorieSeries(from, date); err != nil {
+				msg.err = err
+				return msg
+			}
+		}
+		if msg.savedMeals, err = s.ListSavedMeals(); err != nil {
 			msg.err = err
 			return msg
 		}
@@ -202,6 +218,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.trendKcal = msg.trendKcal
 		m.weights = msg.weights
 		m.weightGoal, m.hasWeightGoal = msg.weightGoal, msg.hasWeightGoal
+		m.intakeByDay = msg.intakeByDay
+		m.savedMeals = msg.savedMeals
 		m.clampDiaryCursor()
 		// First run: offer the setup wizard once (don't re-pop on later reloads).
 		if !m.hasGoal && m.modal == nil && !m.promptedGoal {
@@ -222,6 +240,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.saveWeightCmd(msg.weight)
 	case saveWeightGoalMsg:
 		return m, m.saveWeightGoalCmd(msg.goal)
+	case saveMealMsg:
+		return m, m.saveMealCmd(msg.meal)
+	case logSavedMealMsg:
+		return m, m.logSavedMealCmd(msg.id, msg.meal)
+	case deleteSavedMealMsg:
+		return m, m.deleteSavedMealCmd(msg.id)
 	case mutationDoneMsg:
 		m.modal = nil
 		if msg.err != nil {
@@ -320,6 +344,16 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, m.copyYesterdayCmd()
 		}
 		return m, nil
+	case key.Matches(msg, m.keys.Apply):
+		if m.active == tabGoals {
+			return m.applyMaintenance()
+		}
+		return m, nil
+	case key.Matches(msg, m.keys.Save):
+		if m.active == tabDiary {
+			return m.openSaveMeal()
+		}
+		return m, nil
 	}
 	return m, nil
 }
@@ -401,6 +435,7 @@ func (m Model) openFoodSearch() (tea.Model, tea.Cmd) {
 	meal := domain.MealForHour(time.Now().Hour())
 	sm := newSearchModal(m.store, m.today, meal, m.recent)
 	sm.online = m.online
+	sm.savedMeals = m.savedMeals
 	m.modal = sm
 	return m, sm.focus()
 }

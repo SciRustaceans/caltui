@@ -23,6 +23,8 @@ func (sm *searchModal) View(width, _ int) string {
 		content = sm.detailView(innerW)
 	case stepQuick:
 		content = sm.quickView(innerW)
+	case stepNewFood:
+		content = sm.newFoodView(innerW)
 	default:
 		content = sm.searchView(innerW)
 	}
@@ -35,36 +37,43 @@ func (sm *searchModal) searchView(w int) string {
 	b.WriteString(sm.query.View() + "\n")
 	b.WriteString(styleFaint.Render(strings.Repeat("─", w)) + "\n")
 
-	list := sm.activeList()
+	blank := strings.TrimSpace(sm.query.Value()) == ""
+	rows := sm.rows()
 	heading := "Results"
-	if strings.TrimSpace(sm.query.Value()) == "" {
-		heading = "Recent"
+	if blank {
+		heading = "Saved meals & recent"
 	}
 	b.WriteString(styleDim.Render(heading) + "\n")
 
-	if len(list) == 0 {
-		if strings.TrimSpace(sm.query.Value()) == "" {
+	if len(rows) == 0 {
+		if blank {
 			b.WriteString(styleFaint.Render("  Nothing yet — start typing.\n"))
 		} else {
 			b.WriteString(styleFaint.Render("  No matches. Press ctrl+a to quick-add.\n"))
 		}
 	}
 	limit := 8
-	for i, f := range list {
+	for i, r := range rows {
 		if i >= limit {
-			b.WriteString(styleFaint.Render(fmt.Sprintf("  …and %d more\n", len(list)-limit)))
+			b.WriteString(styleFaint.Render(fmt.Sprintf("  …and %d more\n", len(rows)-limit)))
 			break
 		}
-		kcal := fmt.Sprintf("%d/100g", int(f.Per100g.Kcal+0.5))
-		nameW := w - 2 - 1 - len(kcal) // cursor + space + kcal column
+		var name, right string
+		if r.meal != nil {
+			name = truncate(r.meal.Name, w-2-1-12)
+			right = fmt.Sprintf("recipe %d kcal", int(r.meal.Total().Kcal+0.5))
+		} else {
+			right = fmt.Sprintf("%d/100g", int(r.food.Per100g.Kcal+0.5))
+			name = truncate(r.food.Name, w-2-1-len(right))
+		}
+		nameW := w - 2 - 1 - len(right)
 		if nameW < 8 {
 			nameW = 8
 		}
-		name := truncate(f.Name, nameW)
 		if i == sm.cursor {
-			b.WriteString(styleSelected.Render(fmt.Sprintf("❯ %-*s %s", nameW, name, kcal)) + "\n")
+			b.WriteString(styleSelected.Render(fmt.Sprintf("❯ %-*s %s", nameW, name, right)) + "\n")
 		} else {
-			b.WriteString("  " + styleText.Render(fmt.Sprintf("%-*s", nameW, name)) + " " + styleDim.Render(kcal) + "\n")
+			b.WriteString("  " + styleText.Render(fmt.Sprintf("%-*s", nameW, name)) + " " + styleDim.Render(right) + "\n")
 		}
 	}
 	if sm.searching {
@@ -73,7 +82,19 @@ func (sm *searchModal) searchView(w int) string {
 	if sm.msg != "" {
 		b.WriteString(styleWarn.Render(sm.msg) + "\n")
 	}
-	b.WriteString(styleFaint.Render("↑↓ move · enter select · ctrl+a quick-add"))
+	b.WriteString(styleFaint.Render("↑↓ · enter log · ctrl+a quick-add · ctrl+f new food · ctrl+d del recipe"))
+	return b.String()
+}
+
+func (sm *searchModal) newFoodView(_ int) string {
+	var b strings.Builder
+	b.WriteString(styleTitle.Render("New custom food") + "\n\n")
+	b.WriteString(sm.newFood.View(13))
+	b.WriteString("\n" + styleFaint.Render("per-100g macros · saved & reusable") + "\n")
+	if sm.msg != "" {
+		b.WriteString(styleWarn.Render(sm.msg) + "\n")
+	}
+	b.WriteString("\n" + styleFaint.Render("enter next/create · tab move · esc back"))
 	return b.String()
 }
 
