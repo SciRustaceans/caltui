@@ -21,3 +21,6 @@ internal/seed/*.build.sqlite*
 *.swp
 .idea/
 .vscode/
+
+# Claude Code internal state
+/.claude/
