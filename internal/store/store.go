@@ -17,9 +17,15 @@ type Store struct {
 
 // dsn builds a modernc.org/sqlite DSN with the pragmas we want on every
 // connection: WAL journaling, enforced foreign keys, a busy timeout, and
-// NORMAL synchronous mode. modernc uses the _pragma=name(value) form.
+// NORMAL synchronous mode (modernc uses the _pragma=name(value) form).
+//
+// The raw OS path is used WITHOUT a "file:" prefix: modernc only treats the DSN
+// as a URI when it starts with "file:", and a file: URI built from a Windows
+// path (drive letter + backslashes) is invalid. Without the prefix modernc
+// passes the path to SQLite verbatim and still applies the _pragma params, which
+// is correct on Windows, macOS, and Linux alike.
 func dsn(path string) string {
-	return "file:" + path +
+	return path +
 		"?_pragma=journal_mode(wal)" +
 		"&_pragma=foreign_keys(1)" +
 		"&_pragma=busy_timeout(5000)" +

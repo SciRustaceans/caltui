@@ -34,19 +34,21 @@ calorie and macro targets you can edit anytime.
 
   Without a key the app runs offline-only.
 
-## Deployment (macOS & Linux)
+## Deployment (macOS, Linux & Windows)
 
 caltui is a single static binary with no CGo (pure-Go SQLite), so it
 cross-compiles trivially:
 
 ```bash
-make dist   # -> dist/caltui-{darwin,linux}-{arm64,amd64}
+make dist   # -> dist/caltui-{darwin,linux}-{arm64,amd64} and
+            #    dist/caltui-windows-{amd64,arm64}.exe
 ```
 
 Copy the matching binary to the target machine (or `go install ./cmd/caltui`).
-The data directory (`~/.config/tuitracker/`, honoring `$XDG_CONFIG_HOME`) and the
-bundled food database work identically on both OSes. For online lookups on a
-server, set `FDC_API_KEY` in the environment or `fdc_api_key` in the config file.
+The bundled food database and all features work identically on every OS. On
+Windows, run the `.exe` from **Windows Terminal** (or any modern terminal) for
+correct Unicode/colour rendering. For online lookups, set `FDC_API_KEY` in the
+environment or `fdc_api_key` in the config file.
 
 ## Keys
 
@@ -55,7 +57,8 @@ Arrows or vim `hjkl` to move; `1`–`4` switch tabs; `a` add, `d` delete, `e` ed
 
 ## Data & config location
 
-`~/.config/tuitracker/` (honors `$XDG_CONFIG_HOME`).
+- macOS / Linux: `~/.config/tuitracker/` (honors `$XDG_CONFIG_HOME`)
+- Windows: `%AppData%\tuitracker\` (or `$XDG_CONFIG_HOME` if set)
 
 ## Attribution
 

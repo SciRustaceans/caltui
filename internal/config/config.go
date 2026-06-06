@@ -1,14 +1,16 @@
 // Package config resolves caltui's data directory and loads/saves the optional
-// user config (TOML). The data directory is XDG_CONFIG_HOME/tuitracker when set,
-// otherwise ~/.config/tuitracker on every platform (including macOS) so the
-// location is predictable for a terminal app, rather than ~/Library/Application
-// Support as os.UserConfigDir would give.
+// user config (TOML). The data directory is:
+//   - $XDG_CONFIG_HOME/tuitracker when XDG_CONFIG_HOME is set (any OS);
+//   - %AppData%\tuitracker on Windows;
+//   - ~/.config/tuitracker on macOS and Linux (predictable for a terminal app,
+//     rather than ~/Library/Application Support as os.UserConfigDir would give).
 package config
 
 import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/BurntSushi/toml"
@@ -33,21 +35,29 @@ func defaults() Config { return Config{WeightUnit: "kg"} }
 
 // Dir returns the data directory, creating it (0700) if necessary.
 func Dir() (string, error) {
-	var base string
-	if x := strings.TrimSpace(os.Getenv("XDG_CONFIG_HOME")); x != "" {
-		base = x
-	} else {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return "", err
-		}
-		base = filepath.Join(home, ".config")
+	base, err := baseDir()
+	if err != nil {
+		return "", err
 	}
 	dir := filepath.Join(base, AppDir)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", err
 	}
 	return dir, nil
+}
+
+func baseDir() (string, error) {
+	if x := strings.TrimSpace(os.Getenv("XDG_CONFIG_HOME")); x != "" {
+		return x, nil
+	}
+	if runtime.GOOS == "windows" {
+		return os.UserConfigDir() // %AppData% (Roaming)
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".config"), nil
 }
 
 // Path returns the config file path (ensuring the directory exists).

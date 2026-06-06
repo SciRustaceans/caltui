@@ -8,12 +8,14 @@ build: ## Build the binary into ./bin (native OS/arch)
 	@mkdir -p bin
 	go build -o $(BIN) $(PKG)
 
-dist: ## Cross-compile release binaries for macOS + Linux (pure Go, no CGo)
+dist: ## Cross-compile release binaries for macOS + Linux + Windows (pure Go, no CGo)
 	@mkdir -p dist
-	CGO_ENABLED=0 GOOS=darwin  GOARCH=arm64 go build -o dist/$(BINARY)-darwin-arm64 $(PKG)
-	CGO_ENABLED=0 GOOS=darwin  GOARCH=amd64 go build -o dist/$(BINARY)-darwin-amd64 $(PKG)
-	CGO_ENABLED=0 GOOS=linux   GOARCH=arm64 go build -o dist/$(BINARY)-linux-arm64  $(PKG)
-	CGO_ENABLED=0 GOOS=linux   GOARCH=amd64 go build -o dist/$(BINARY)-linux-amd64  $(PKG)
+	CGO_ENABLED=0 GOOS=darwin  GOARCH=arm64 go build -o dist/$(BINARY)-darwin-arm64      $(PKG)
+	CGO_ENABLED=0 GOOS=darwin  GOARCH=amd64 go build -o dist/$(BINARY)-darwin-amd64      $(PKG)
+	CGO_ENABLED=0 GOOS=linux   GOARCH=arm64 go build -o dist/$(BINARY)-linux-arm64       $(PKG)
+	CGO_ENABLED=0 GOOS=linux   GOARCH=amd64 go build -o dist/$(BINARY)-linux-amd64       $(PKG)
+	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o dist/$(BINARY)-windows-amd64.exe $(PKG)
+	CGO_ENABLED=0 GOOS=windows GOARCH=arm64 go build -o dist/$(BINARY)-windows-arm64.exe $(PKG)
 
 run: ## Run the app
 	go run $(PKG)

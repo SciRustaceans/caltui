@@ -2,3 +2,8 @@
 # from being mangled by line-ending normalization or shown as huge text diffs.
 *.golden -text
 internal/seed/foods.sqlite.gz binary
+
+# Keep source LF-normalized so the repo builds identically if cloned on Windows.
+*.go text eol=lf
+*.sql text eol=lf
+Makefile text eol=lf
