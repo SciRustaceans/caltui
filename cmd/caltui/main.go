@@ -6,32 +6,35 @@ import (
 	"os"
 
 	tea "charm.land/bubbletea/v2"
+
+	"caltui/internal/config"
+	"caltui/internal/store"
+	"caltui/internal/tui"
 )
 
-// model is a placeholder root model; the real TUI is built in internal/tui.
-type model struct{}
-
-func (m model) Init() tea.Cmd { return nil }
-
-func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if key, ok := msg.(tea.KeyPressMsg); ok {
-		switch key.String() {
-		case "q", "ctrl+c":
-			return m, tea.Quit
-		}
-	}
-	return m, nil
-}
-
-func (m model) View() tea.View {
-	v := tea.NewView("caltui — coming soon.\n\nPress q to quit.")
-	v.AltScreen = true
-	return v
-}
-
 func main() {
-	if _, err := tea.NewProgram(model{}).Run(); err != nil {
+	if err := run(); err != nil {
 		fmt.Fprintf(os.Stderr, "caltui: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+func run() error {
+	dbPath, err := config.DBPath()
+	if err != nil {
+		return fmt.Errorf("resolving data directory: %w", err)
+	}
+	if _, err := store.SeedIfMissing(dbPath); err != nil {
+		return fmt.Errorf("seeding food database: %w", err)
+	}
+	st, err := store.Open(dbPath)
+	if err != nil {
+		return err
+	}
+	defer st.Close()
+
+	if _, err := tea.NewProgram(tui.New(st)).Run(); err != nil {
+		return err
+	}
+	return nil
 }
