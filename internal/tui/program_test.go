@@ -2,12 +2,15 @@ package tui
 
 import (
 	"bytes"
+	"fmt"
+	"math"
 	"testing"
 	"time"
 
 	"github.com/charmbracelet/x/exp/teatest/v2"
 
 	"caltui/internal/domain"
+	"caltui/internal/nutrition"
 )
 
 // TestProgramSmoke runs the real Bubble Tea program through teatest: it
@@ -43,4 +46,62 @@ func TestProgramSmoke(t *testing.T) {
 	// "q" quits.
 	tm.Type("q")
 	tm.WaitFinished(t, teatest.WithFinalTimeout(5*time.Second))
+}
+
+// TestWeightPaceUpdatesDashboardE2E drives the exact reported flow: open the
+// weight-goal modal, set a "Lose 1 kg/week" pace, save, and confirm the
+// dashboard's calorie target actually changes.
+func TestWeightPaceUpdatesDashboardE2E(t *testing.T) {
+	s := testStore(t)
+	now := time.Now()
+	today := now.Format("2006-01-02")
+	if _, err := s.AddGoal(domain.Goal{
+		EffectiveDate: today, Target: domain.Macros{Kcal: 2209, Protein: 144, Carbs: 230, Fat: 72},
+		Sex: domain.Male, BirthDate: nutrition.BirthDateForAge(30, now),
+		HeightCm: 180, WeightKg: 80, Activity: domain.ModeratelyActive, GoalRate: -0.5,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.UpsertWeight(domain.Weight{Date: today, Kg: 80, Unit: "kg"}); err != nil {
+		t.Fatal(err)
+	}
+
+	// After "Lose 1 kg/week": target = TDEE(BMR(male,80,180,30), moderate) - 1100.
+	want := nutrition.CalorieTarget(nutrition.TDEE(nutrition.BMR(domain.Male, 80, 180, 30), domain.ModeratelyActive), -1.0).Kcal
+	wantStr := fmt.Sprintf("%d", int(math.Round(want))) // 1659
+
+	tm := teatest.NewTestModel(t, New(s, nil), teatest.WithInitialTermSize(120, 32))
+	out := tm.Output()
+	teatest.WaitFor(t, out, contains("2209"), teatest.WithDuration(5*time.Second)) // initial target
+
+	tm.Send(press("4")) // Weight tab
+	teatest.WaitFor(t, out, contains("Current:"), teatest.WithDuration(5*time.Second))
+	tm.Send(press("e")) // open weight-goal modal
+	teatest.WaitFor(t, out, contains("Weight goal"), teatest.WithDuration(5*time.Second))
+
+	tm.Type("75")          // target weight
+	tm.Send(press("tab"))  // -> unit
+	tm.Send(press("tab"))  // -> pace
+	tm.Send(press("left")) // maintain -> lose 0.25
+	tm.Send(press("left")) // -> lose 0.5
+	tm.Send(press("left")) // -> lose 1
+	tm.Send(press("enter"))
+
+	// Wait until the modal closes and the new weight goal is shown.
+	teatest.WaitFor(t, out, contains("Goal: 75"), teatest.WithDuration(5*time.Second))
+
+	tm.Send(press("1")) // Dashboard
+	teatest.WaitFor(t, out, contains(wantStr), teatest.WithDuration(5*time.Second))
+
+	tm.Send(press("q"))
+	tm.WaitFinished(t, teatest.WithFinalTimeout(5*time.Second))
+
+	fm := tm.FinalModel(t).(Model)
+	if fm.goal.GoalRate != -1.0 {
+		t.Errorf("final goal rate = %g, want -1.0", fm.goal.GoalRate)
+	}
+}
+
+func contains(s string) func([]byte) bool {
+	return func(b []byte) bool { return bytes.Contains(b, []byte(s)) }
 }

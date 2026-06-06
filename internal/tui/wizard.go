@@ -277,11 +277,14 @@ func trimNum(f float64) string { return strconv.FormatFloat(f, 'f', -1, 64) }
 
 // --- manual goal editing ---
 
-// manualGoalModal edits calorie + macro targets by hand.
+// manualGoalModal edits calorie + macro targets by hand. Editing a macro
+// rebalances the other two to keep the calorie total fixed; editing calories
+// rescales the macros proportionally.
 type manualGoalModal struct {
-	date string
-	form form
-	msg  string
+	date     string
+	form     form
+	focusVal string // value of the focused field when it gained focus
+	msg      string
 }
 
 func newManualGoalModal(date string, cur domain.Goal) *manualGoalModal {
@@ -300,7 +303,11 @@ func newManualGoalModal(date string, cur domain.Goal) *manualGoalModal {
 	return &manualGoalModal{date: date, form: f}
 }
 
-func (mm *manualGoalModal) focus() tea.Cmd { return mm.form.Focus() }
+func (mm *manualGoalModal) focus() tea.Cmd {
+	cmd := mm.form.Focus()
+	mm.focusVal = mm.form.Value(mm.form.focus)
+	return cmd
+}
 
 func (mm *manualGoalModal) Update(msg tea.Msg) (modalModel, tea.Cmd) {
 	key, ok := msg.(tea.KeyPressMsg)
@@ -310,18 +317,118 @@ func (mm *manualGoalModal) Update(msg tea.Msg) (modalModel, tea.Cmd) {
 	switch key.String() {
 	case "esc":
 		return mm, closeModalCmd
-	case "tab":
-		return mm, mm.form.Next()
-	case "shift+tab":
-		return mm, mm.form.Prev()
+	case "tab", "down":
+		return mm, mm.move(true)
+	case "shift+tab", "up":
+		return mm, mm.move(false)
 	case "enter":
+		mm.balanceIfChanged()
 		if !mm.form.AtLast() {
-			return mm, mm.form.Next()
+			return mm, mm.move(true)
 		}
 		return mm.submit()
 	default:
 		return mm, mm.form.Update(msg)
 	}
+}
+
+// move rebalances if the leaving field changed, then advances focus.
+func (mm *manualGoalModal) move(next bool) tea.Cmd {
+	mm.balanceIfChanged()
+	var cmd tea.Cmd
+	if next {
+		cmd = mm.form.Next()
+	} else {
+		cmd = mm.form.Prev()
+	}
+	mm.focusVal = mm.form.Value(mm.form.focus)
+	return cmd
+}
+
+// balanceIfChanged rebalances when the focused field's value differs from when
+// it gained focus.
+func (mm *manualGoalModal) balanceIfChanged() {
+	leaving := mm.form.focus
+	if mm.form.Value(leaving) != mm.focusVal {
+		mm.balance(leaving)
+		mm.focusVal = mm.form.Value(leaving)
+	}
+}
+
+func macroKcalPerGram(field int) float64 {
+	if field == 3 { // fat
+		return 9
+	}
+	return 4 // protein, carbs
+}
+
+// balance keeps the calorie total consistent after the user edits `edited`:
+// editing calories (field 0) rescales the macros; editing a macro (1-3)
+// rebalances the other two so total calories stay fixed.
+func (mm *manualGoalModal) balance(edited int) {
+	k := parseF(mm.form.Value(0))
+	if k <= 0 {
+		return
+	}
+	switch edited {
+	case 0:
+		mm.rescaleMacros(k)
+	case 1, 2, 3:
+		mm.rebalanceMacros(edited, k)
+	}
+}
+
+// rescaleMacros scales the macros to hit k while preserving their ratios; if
+// there are no macros yet it applies a default 30P/40C/30F split.
+func (mm *manualGoalModal) rescaleMacros(k float64) {
+	p, c, f := parseF(mm.form.Value(1)), parseF(mm.form.Value(2)), parseF(mm.form.Value(3))
+	total := 4*p + 4*c + 9*f
+	if total <= 0 {
+		mm.setMacro(1, k*0.30/4)
+		mm.setMacro(2, k*0.40/4)
+		mm.setMacro(3, k*0.30/9)
+		return
+	}
+	factor := k / total
+	mm.setMacro(1, p*factor)
+	mm.setMacro(2, c*factor)
+	mm.setMacro(3, f*factor)
+}
+
+// rebalanceMacros holds `edited` and splits the remaining calories across the
+// other two macros in proportion to their current calorie shares.
+func (mm *manualGoalModal) rebalanceMacros(edited int, k float64) {
+	var o1, o2 int
+	for _, i := range []int{1, 2, 3} {
+		if i == edited {
+			continue
+		}
+		if o1 == 0 {
+			o1 = i
+		} else {
+			o2 = i
+		}
+	}
+	remaining := k - parseF(mm.form.Value(edited))*macroKcalPerGram(edited)
+	if remaining < 0 {
+		remaining = 0
+	}
+	o1kcal := parseF(mm.form.Value(o1)) * macroKcalPerGram(o1)
+	o2kcal := parseF(mm.form.Value(o2)) * macroKcalPerGram(o2)
+	if total := o1kcal + o2kcal; total > 0 {
+		mm.setMacro(o1, remaining*o1kcal/total/macroKcalPerGram(o1))
+		mm.setMacro(o2, remaining*o2kcal/total/macroKcalPerGram(o2))
+	} else {
+		mm.setMacro(o1, remaining/2/macroKcalPerGram(o1))
+		mm.setMacro(o2, remaining/2/macroKcalPerGram(o2))
+	}
+}
+
+func (mm *manualGoalModal) setMacro(field int, grams float64) {
+	if grams < 0 {
+		grams = 0
+	}
+	mm.form.fields[field].ti.SetValue(strconv.Itoa(int(grams + 0.5)))
 }
 
 func (mm *manualGoalModal) submit() (modalModel, tea.Cmd) {
@@ -349,8 +456,9 @@ func (mm *manualGoalModal) View(width, _ int) string {
 	var b strings.Builder
 	b.WriteString(styleTitle.Render("Edit goal manually") + "\n\n")
 	b.WriteString(mm.form.View(9))
+	b.WriteString("\n" + styleFaint.Render("editing a macro rebalances the others to keep calories fixed") + "\n")
 	if mm.msg != "" {
-		b.WriteString("\n" + styleWarn.Render(mm.msg) + "\n")
+		b.WriteString(styleWarn.Render(mm.msg) + "\n")
 	}
 	b.WriteString("\n" + styleFaint.Render("enter next/save · tab move · esc cancel"))
 	return stylePanel.Width(boxW).Render(b.String())
