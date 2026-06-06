@@ -58,9 +58,10 @@ type Model struct {
 	weightGoal    domain.WeightGoal
 	hasWeightGoal bool
 
-	diaryCursor int
-	modal       modalModel
-	err         error
+	diaryCursor  int
+	modal        modalModel
+	promptedGoal bool // first-run wizard has been offered (don't re-pop)
+	err          error
 }
 
 // New builds a root model backed by store s and an optional online provider
@@ -202,8 +203,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.weights = msg.weights
 		m.weightGoal, m.hasWeightGoal = msg.weightGoal, msg.hasWeightGoal
 		m.clampDiaryCursor()
-		// First run: no goal yet -> launch the setup wizard.
-		if !m.hasGoal && m.modal == nil {
+		// First run: offer the setup wizard once (don't re-pop on later reloads).
+		if !m.hasGoal && m.modal == nil && !m.promptedGoal {
+			m.promptedGoal = true
 			wm := newWizardModal(m.today, time.Now(), nil)
 			m.modal = wm
 			return m, wm.focusActive()

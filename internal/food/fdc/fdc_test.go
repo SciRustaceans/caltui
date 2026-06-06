@@ -51,6 +51,34 @@ func TestParseSearch(t *testing.T) {
 	}
 }
 
+// TestDuplicateNutrientsPreferFirst mirrors a real FDC branded response where a
+// nutrient appears twice (per-100g first, then per-serving). We must keep the
+// per-100g value.
+func TestDuplicateNutrientsPreferFirst(t *testing.T) {
+	data := []byte(`{"foods":[
+	  {"fdcId":1,"description":"Cheerios","dataType":"Branded","servingSize":20,"servingSizeUnit":"GRM",
+	   "foodNutrients":[
+	     {"nutrientNumber":"208","unitName":"KCAL","value":359},
+	     {"nutrientNumber":"203","unitName":"G","value":12.8},
+	     {"nutrientNumber":"208","unitName":"KCAL","value":117},
+	     {"nutrientNumber":"203","unitName":"G","value":5.56}]}
+	]}`)
+	foods, err := parseSearch(data)
+	if err != nil || len(foods) != 1 {
+		t.Fatalf("parse: %d foods, %v", len(foods), err)
+	}
+	if foods[0].Per100g.Kcal != 359 {
+		t.Errorf("kcal = %g, want 359 (per-100g, first occurrence)", foods[0].Per100g.Kcal)
+	}
+	if foods[0].Per100g.Protein != 12.8 {
+		t.Errorf("protein = %g, want 12.8", foods[0].Per100g.Protein)
+	}
+	// FDC's "GRM" unit code must parse as grams.
+	if foods[0].ServingSize != 20 || foods[0].ServingUnit != domain.UnitGram {
+		t.Errorf("serving = %g %q, want 20 g", foods[0].ServingSize, foods[0].ServingUnit)
+	}
+}
+
 func TestEnergyIgnoresKJ(t *testing.T) {
 	byNum := map[string]searchNutrient{"208": {Number: "208", UnitName: "kJ", Value: 1500}}
 	if _, ok := energyKcal(byNum); ok {

@@ -15,6 +15,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"caltui/internal/domain"
@@ -126,9 +127,14 @@ func parseSearch(data []byte) ([]domain.Food, error) {
 }
 
 func normalize(sf searchFood) (domain.Food, bool) {
+	// A search result can list the same nutrientNumber more than once (a
+	// per-100g entry plus a per-serving one). The per-100g value comes first, so
+	// keep the FIRST occurrence and ignore later duplicates.
 	byNum := make(map[string]searchNutrient, len(sf.FoodNutrients))
 	for _, n := range sf.FoodNutrients {
-		byNum[n.Number] = n
+		if _, exists := byNum[n.Number]; !exists {
+			byNum[n.Number] = n
+		}
 	}
 	kcal, ok := energyKcal(byNum)
 	if !ok {
@@ -153,10 +159,11 @@ func normalize(sf searchFood) (domain.Food, bool) {
 		Per100g:   domain.Macros{Kcal: kcal, Protein: macro("203"), Carbs: macro("205"), Fat: macro("204")},
 		Household: sf.HouseholdServingFullText,
 	}
-	switch sf.ServingSizeUnit {
-	case "g", "G":
+	// FDC uses unit codes like "GRM"/"MLT" as well as "g"/"ml".
+	switch strings.ToUpper(sf.ServingSizeUnit) {
+	case "G", "GRM":
 		f.ServingSize, f.ServingUnit = sf.ServingSize, domain.UnitGram
-	case "ml", "ML", "mL":
+	case "ML", "MLT":
 		f.ServingSize, f.ServingUnit = sf.ServingSize, domain.UnitMilliliter
 	}
 	return f, true

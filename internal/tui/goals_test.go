@@ -110,6 +110,12 @@ func TestFirstRunOpensWizard(t *testing.T) {
 	if _, ok := m.modal.(*wizardModal); !ok {
 		t.Errorf("expected wizard modal on first run, got %T", m.modal)
 	}
+	// Dismiss it; a later reload with still-no-goal must NOT re-pop the wizard.
+	m, _ = update(t, m, closeModalMsg{})
+	m, _ = update(t, m, dayLoadedMsg{hasGoal: false})
+	if m.modal != nil {
+		t.Errorf("wizard should not re-open after being dismissed once, got %T", m.modal)
+	}
 }
 
 func TestGoalsView(t *testing.T) {
