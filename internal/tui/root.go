@@ -52,6 +52,7 @@ type Model struct {
 	weekKcal []float64
 
 	diaryCursor int
+	modal       modalModel
 	err         error
 }
 
@@ -140,6 +141,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 		m.help.SetWidth(msg.Width)
+		if m.modal != nil {
+			var cmd tea.Cmd
+			m.modal, cmd = m.modal.Update(msg)
+			return m, cmd
+		}
 		return m, nil
 	case dayLoadedMsg:
 		if msg.err != nil {
@@ -151,8 +157,32 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.recent, m.weekKcal = msg.recent, msg.weekKcal
 		m.clampDiaryCursor()
 		return m, nil
+	case closeModalMsg:
+		m.modal = nil
+		return m, nil
+	case saveEntryMsg:
+		return m, m.saveEntryCmd(msg.entry)
+	case mutationDoneMsg:
+		m.modal = nil
+		if msg.err != nil {
+			m.err = msg.err
+			return m, nil
+		}
+		m.err = nil
+		return m, m.loadDay()
 	case tea.KeyPressMsg:
+		if m.modal != nil {
+			var cmd tea.Cmd
+			m.modal, cmd = m.modal.Update(msg)
+			return m, cmd
+		}
 		return m.handleKey(msg)
+	default:
+		if m.modal != nil {
+			var cmd tea.Cmd
+			m.modal, cmd = m.modal.Update(msg)
+			return m, cmd
+		}
 	}
 	return m, nil
 }
@@ -187,6 +217,32 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.clampDiaryCursor()
 		}
 		return m, nil
+	case key.Matches(msg, m.keys.Add), key.Matches(msg, m.keys.Search):
+		meal := domain.MealForHour(time.Now().Hour())
+		sm := newSearchModal(m.store, m.today, meal, m.recent)
+		m.modal = sm
+		return m, sm.focus()
+	case key.Matches(msg, m.keys.Edit):
+		if m.active == tabDiary {
+			if e, ok := m.selectedEntry(); ok {
+				sm := newEditModal(m.today, e)
+				m.modal = sm
+				return m, sm.focus()
+			}
+		}
+		return m, nil
+	case key.Matches(msg, m.keys.Delete):
+		if m.active == tabDiary {
+			if e, ok := m.selectedEntry(); ok {
+				return m, m.deleteEntryCmd(e.ID)
+			}
+		}
+		return m, nil
+	case key.Matches(msg, m.keys.Copy):
+		if m.active == tabDiary {
+			return m, m.copyYesterdayCmd()
+		}
+		return m, nil
 	}
 	return m, nil
 }
@@ -208,7 +264,12 @@ func (m Model) render() string {
 	if bodyHeight < 1 {
 		bodyHeight = 1
 	}
-	body := lipgloss.NewStyle().Width(m.width).Height(bodyHeight).Render(m.renderBody())
+	var body string
+	if m.modal != nil {
+		body = lipgloss.Place(m.width, bodyHeight, lipgloss.Center, lipgloss.Center, m.modal.View(m.width, bodyHeight))
+	} else {
+		body = lipgloss.NewStyle().Width(m.width).Height(bodyHeight).Render(m.renderBody())
+	}
 	return lipgloss.JoinVertical(lipgloss.Left, header, body, footer)
 }
 
@@ -231,6 +292,9 @@ func (m Model) renderFooter() string {
 	rule := styleFaint.Render(strings.Repeat("─", m.width))
 	if m.err != nil {
 		return rule + "\n" + styleWarn.Render("error: "+m.err.Error())
+	}
+	if m.modal != nil {
+		return rule + "\n" + styleDim.Render("esc cancel")
 	}
 	if m.fullHelp {
 		return rule + "\n" + m.help.FullHelpView(m.keys.FullHelp())

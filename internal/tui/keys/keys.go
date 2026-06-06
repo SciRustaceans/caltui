@@ -18,6 +18,7 @@ type KeyMap struct {
 	Edit   key.Binding
 	Delete key.Binding
 	Search key.Binding
+	Copy   key.Binding
 	Enter  key.Binding
 	Back   key.Binding
 
@@ -40,6 +41,7 @@ func Default() KeyMap {
 		Edit:   key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "edit")),
 		Delete: key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "delete")),
 		Search: key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "search")),
+		Copy:   key.NewBinding(key.WithKeys("y"), key.WithHelp("y", "copy yesterday")),
 		Enter:  key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "select")),
 		Back:   key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
 
@@ -57,7 +59,7 @@ func (k KeyMap) ShortHelp() []key.Binding {
 func (k KeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down, k.Left, k.Right, k.Tab, k.PrevTab, k.Tabs},
-		{k.Add, k.Edit, k.Delete, k.Search, k.Enter, k.Back},
+		{k.Add, k.Edit, k.Delete, k.Search, k.Copy, k.Enter, k.Back},
 		{k.Help, k.Quit},
 	}
 }
