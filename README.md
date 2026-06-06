@@ -1,6 +1,5 @@
 # caltui
 
-A keyboard-driven calorie & macro tracker that runs entirely in your terminal —
 MyFitnessPal in a TUI. Offline-first, single-user, local SQLite. Tracks calories
 plus protein/carbs/fat, with daily goals, custom foods & saved meals, body-weight
 tracking, and history/trend charts.
