@@ -14,6 +14,12 @@ linters:
       exclude-functions:
         - (*database/sql.Rows).Close
         - (*os.File).Close
+        - (*compress/gzip.Reader).Close
+        - (*archive/zip.ReadCloser).Close
+        - (*database/sql.Stmt).Close
+        - (*caltui/internal/store.Store).Close
+        - (io.Closer).Close
+        - (io.ReadCloser).Close
 
   exclusions:
     rules:

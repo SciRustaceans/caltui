@@ -68,6 +68,46 @@ func (s *Store) GetFood(id int64) (domain.Food, bool, error) {
 	return f, true, nil
 }
 
+// InsertFoods bulk-inserts foods in a single transaction with a prepared
+// statement (used by the ETL to build the bundled seed). Returns the count
+// inserted.
+func (s *Store) InsertFoods(foods []domain.Food) (int, error) {
+	if len(foods) == 0 {
+		return 0, nil
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	stmt, err := tx.Prepare(`
+		INSERT INTO foods (source, fdc_id, name, brand,
+			kcal_100g, protein_100g, carbs_100g, fat_100g,
+			serving_size, serving_unit, household, density)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
+	if err != nil {
+		return 0, err
+	}
+	defer stmt.Close()
+
+	n := 0
+	for _, f := range foods {
+		if _, err := stmt.Exec(
+			string(f.Source), nullableID(f.FDCID), f.Name, f.Brand,
+			f.Per100g.Kcal, f.Per100g.Protein, f.Per100g.Carbs, f.Per100g.Fat,
+			f.ServingSize, string(f.ServingUnit), f.Household, f.Density,
+		); err != nil {
+			return n, err
+		}
+		n++
+	}
+	if err := tx.Commit(); err != nil {
+		return n, err
+	}
+	return n, nil
+}
+
 // DeleteFood removes a food. Diary entries that referenced it keep their macro
 // snapshot; their food_id becomes NULL (ON DELETE SET NULL).
 func (s *Store) DeleteFood(id int64) error {

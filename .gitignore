@@ -13,6 +13,8 @@
 /tools/etl/_data/
 /tools/etl/*.sqlite
 /tools/etl/*.zip
+# ETL build temp (the committed asset is internal/seed/foods.sqlite.gz)
+internal/seed/*.build.sqlite*
 
 # Editor / OS
 .DS_Store

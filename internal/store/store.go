@@ -61,6 +61,13 @@ func (s *Store) Close() error { return s.db.Close() }
 // DB exposes the raw handle for callers that need it (e.g. the ETL tool).
 func (s *Store) DB() *sql.DB { return s.db }
 
+// Checkpoint truncates the WAL into the main database file, producing a single
+// self-contained file (used by the ETL before gzipping the seed).
+func (s *Store) Checkpoint() error {
+	_, err := s.db.Exec(`PRAGMA wal_checkpoint(TRUNCATE)`)
+	return err
+}
+
 // --- small helpers shared by the repository files ---
 
 // nullableID converts a *int64 to a SQL-friendly value.

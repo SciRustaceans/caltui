@@ -1,4 +1,4 @@
 # teatest golden snapshots and the bundled food DB are binary-ish; keep them
 # from being mangled by line-ending normalization or shown as huge text diffs.
 *.golden -text
-data/foods.sqlite.gz binary
+internal/seed/foods.sqlite.gz binary
