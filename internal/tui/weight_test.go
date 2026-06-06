@@ -4,6 +4,7 @@ import (
 	"math"
 	"strings"
 	"testing"
+	"time"
 
 	"caltui/internal/domain"
 	"caltui/internal/nutrition"
@@ -76,6 +77,42 @@ func TestRootWeightWiring(t *testing.T) {
 	}
 	if g, ok, _ := s.GetWeightGoal(); !ok || g.TargetKg != 78 {
 		t.Errorf("weight goal not persisted: %+v", g)
+	}
+}
+
+// TestWeightPaceUpdatesCalories verifies that setting the weight-goal pace
+// recomputes the daily calorie target from the goal's TDEE inputs.
+func TestWeightPaceUpdatesCalories(t *testing.T) {
+	s := testStore(t)
+	m := New(s, nil)
+	m.width, m.height = 100, 30
+	date := m.today
+	now := time.Now()
+
+	// An existing wizard-style goal with full TDEE inputs (male, 90 kg, 180 cm, 30y).
+	m.goal = domain.Goal{
+		EffectiveDate: date, Target: domain.Macros{Kcal: 2700},
+		Sex: domain.Male, BirthDate: nutrition.BirthDateForAge(30, now),
+		HeightCm: 180, WeightKg: 90, Activity: domain.ModeratelyActive, GoalRate: -0.25,
+	}
+	m.hasGoal = true
+
+	_, cmd := update(t, m, saveWeightGoalMsg{goal: domain.WeightGoal{TargetKg: 80, RatePerWeek: -1.0, StartKg: 90}})
+	if d, ok := cmd().(mutationDoneMsg); !ok || d.err != nil {
+		t.Fatalf("save weight goal failed: %+v", d)
+	}
+
+	g, ok, _ := s.CurrentGoal(date)
+	if !ok {
+		t.Fatal("no current goal")
+	}
+	bmr := nutrition.BMR(domain.Male, 90, 180, 30)
+	want := nutrition.CalorieTarget(nutrition.TDEE(bmr, domain.ModeratelyActive), -1.0).Kcal
+	if g.GoalRate != -1.0 {
+		t.Errorf("goal rate = %g, want -1.0 (pace not applied to calories)", g.GoalRate)
+	}
+	if math.Abs(g.Target.Kcal-math.Round(want)) > 0.5 {
+		t.Errorf("calorie target = %g, want ~%g after pace change", g.Target.Kcal, math.Round(want))
 	}
 }
 

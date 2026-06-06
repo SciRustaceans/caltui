@@ -30,3 +30,13 @@ func TestLineChart(t *testing.T) {
 		t.Errorf("expected a multi-line chart, got %q", out)
 	}
 }
+
+func TestProjectionChart(t *testing.T) {
+	if got := ProjectionChart([]float64{1}, []float64{2, 3}, 5, 20, 0); got != "" {
+		t.Errorf("single actual point should render empty, got %q", got)
+	}
+	out := ProjectionChart([]float64{82, 81.5, 81}, []float64{80.5, 80, 79.5}, 6, 30, 1)
+	if out == "" || !strings.Contains(out, "\n") {
+		t.Errorf("expected a multi-line projection chart, got %q", out)
+	}
+}

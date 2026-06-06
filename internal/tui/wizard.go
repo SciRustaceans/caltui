@@ -20,11 +20,31 @@ type goalOption struct {
 }
 
 var goalOptions = []goalOption{
+	{"Lose 3 kg/week", -3.0},
+	{"Lose 2.5 kg/week", -2.5},
+	{"Lose 2 kg/week", -2.0},
+	{"Lose 1.5 kg/week", -1.5},
+	{"Lose 1 kg/week", -1.0},
 	{"Lose 0.5 kg/week", -0.5},
 	{"Lose 0.25 kg/week", -0.25},
 	{"Maintain weight", 0},
 	{"Gain 0.25 kg/week", 0.25},
 	{"Gain 0.5 kg/week", 0.5},
+	{"Gain 1 kg/week", 1.0},
+	{"Gain 1.5 kg/week", 1.5},
+	{"Gain 2 kg/week", 2.0},
+	{"Gain 2.5 kg/week", 2.5},
+	{"Gain 3 kg/week", 3.0},
+}
+
+// defaultGoalIdx returns the index of the "maintain" option (rate 0).
+func defaultGoalIdx() int {
+	for i, o := range goalOptions {
+		if o.rate == 0 {
+			return i
+		}
+	}
+	return 0
 }
 
 var sexOptions = []domain.Sex{domain.Male, domain.Female}
@@ -69,7 +89,7 @@ func newWizardModal(date string, now time.Time, prefill *domain.Goal) *wizardMod
 	w := &wizardModal{
 		date: date, now: now, focus: wfSex,
 		age: num(""), height: num(""), weight: num(""),
-		sexIdx: 0, activityIdx: 2, goalIdx: 2, // male, moderately active, maintain
+		sexIdx: 0, activityIdx: 2, goalIdx: defaultGoalIdx(), // male, moderately active, maintain
 	}
 	if prefill != nil {
 		w.prefill(*prefill, now)
@@ -181,7 +201,7 @@ func (w *wizardModal) compute() (nutrition.TargetResult, nutrition.Split, bool) 
 	rate := goalOptions[w.goalIdx].rate
 	bmr := nutrition.BMR(sex, wt, h, age)
 	tdee := nutrition.TDEE(bmr, activity)
-	target := nutrition.CalorieTarget(tdee, rate, sex)
+	target := nutrition.CalorieTarget(tdee, rate)
 	split := nutrition.DefaultMacroSplit(target.Kcal, wt)
 	return target, split, true
 }
@@ -231,12 +251,6 @@ func (w *wizardModal) View(width, _ int) string {
 		b.WriteString(styleGood.Render(fmt.Sprintf("→ %s kcal", fmtInt(target.Kcal))) +
 			styleDim.Render(fmt.Sprintf("  %dP / %dC / %dF",
 				int(m.Protein+0.5), int(m.Carbs+0.5), int(m.Fat+0.5))) + "\n")
-		if target.Clamped {
-			b.WriteString(styleWarn.Render("⚠ "+target.Reason) + "\n")
-		}
-		if split.Adjusted {
-			b.WriteString(styleWarn.Render("⚠ "+split.Note) + "\n")
-		}
 	} else {
 		b.WriteString(styleFaint.Render("Fill in age, height, and weight to see a suggestion.\n"))
 	}

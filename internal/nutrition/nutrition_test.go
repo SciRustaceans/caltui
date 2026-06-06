@@ -55,36 +55,24 @@ func TestTDEE(t *testing.T) {
 }
 
 func TestCalorieTarget(t *testing.T) {
+	// No safety floor or cap: target = TDEE + rate*7700/7, only clamped >= 0.
 	cases := []struct {
-		name        string
-		tdee, rate  float64
-		sex         domain.Sex
-		wantKcal    float64
-		wantClamped bool
+		name       string
+		tdee, rate float64
+		want       float64
 	}{
-		// 0.5 kg/wk loss => 550 deficit, comfortably above floors.
-		{"moderate deficit, no clamp", 2790, -0.5, domain.Male, 2240, false},
-		// Maintenance.
-		{"maintain", 2200, 0, domain.Female, 2200, false},
-		// Small surplus, under the cap.
-		{"small surplus, no clamp", 2000, 0.2, domain.Male, 2220, false},
-		// Sex floor binds: raw = 1800 - 1100 = 700 -> floor 1500.
-		{"floor binds (male)", 1800, -1.0, domain.Male, 1500, true},
-		// 25% rule binds: raw = 2500 - 1100 = 1400; max(1500, 1875) = 1875.
-		{"deficit fraction binds", 2500, -1.0, domain.Male, 1875, true},
-		// Surplus cap binds: raw = 2000 + 1100 = 3100; cap 1.2*2000 = 2400.
-		{"surplus cap binds", 2000, 1.0, domain.Male, 2400, true},
+		{"moderate deficit", 2790, -0.5, 2240}, // -550
+		{"maintain", 2200, 0, 2200},            //
+		{"small surplus", 2000, 0.2, 2220},     // +220
+		{"aggressive deficit, no floor", 1800, -1.0, 700},
+		{"large deficit, no fraction cap", 2500, -1.0, 1400},
+		{"large surplus, no cap", 2000, 1.0, 3100},
+		{"3 kg/week gain mirrors loss", 2790, 3.0, 6090}, // +3300
+		{"impossible deficit clamps to zero", 2000, -3.0, 0},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got := CalorieTarget(c.tdee, c.rate, c.sex)
-			approx(t, "Kcal", got.Kcal, c.wantKcal)
-			if got.Clamped != c.wantClamped {
-				t.Errorf("Clamped = %v, want %v (reason %q)", got.Clamped, c.wantClamped, got.Reason)
-			}
-			if got.Clamped && got.Reason == "" {
-				t.Errorf("clamped result must have a reason")
-			}
+			approx(t, "Kcal", CalorieTarget(c.tdee, c.rate).Kcal, c.want)
 		})
 	}
 }

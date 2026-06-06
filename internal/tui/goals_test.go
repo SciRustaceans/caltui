@@ -38,7 +38,7 @@ func TestWizardComputeAndSave(t *testing.T) {
 	// Expected via the nutrition package directly.
 	bmr := nutrition.BMR(domain.Female, 82, 180, 30)
 	tdee := nutrition.TDEE(bmr, domain.ModeratelyActive)
-	exp := nutrition.CalorieTarget(tdee, -0.5, domain.Female)
+	exp := nutrition.CalorieTarget(tdee, -0.5)
 
 	target, _, ok := w.compute()
 	if !ok {
@@ -115,6 +115,44 @@ func TestFirstRunOpensWizard(t *testing.T) {
 	m, _ = update(t, m, dayLoadedMsg{hasGoal: false})
 	if m.modal != nil {
 		t.Errorf("wizard should not re-open after being dismissed once, got %T", m.modal)
+	}
+}
+
+// TestDashboardReflectsGoalUpdate verifies the dashboard's "calories left"
+// updates after the goal changes, via the real save -> mutationDone -> reload
+// message chain.
+func TestDashboardReflectsGoalUpdate(t *testing.T) {
+	s := testStore(t)
+	m := New(s, nil) // today = now
+	m.width, m.height = 100, 30
+	date := m.today
+
+	// 1500 kcal logged today.
+	if _, err := s.AddEntry(domain.LogEntry{
+		Date: date, Meal: domain.Lunch, Name: "x",
+		PerUnit: domain.Macros{Kcal: 1}, Quantity: 1500, Unit: domain.UnitGram,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// runChain applies a saveGoalMsg and drives the async commands it spawns
+	// (saveGoalCmd -> mutationDoneMsg -> loadDay -> dayLoadedMsg).
+	runChain := func(m Model, target float64) Model {
+		m, cmd := update(t, m, saveGoalMsg{goal: domain.Goal{
+			EffectiveDate: date, Target: domain.Macros{Kcal: target}, Manual: true,
+		}})
+		m, cmd = update(t, m, cmd()) // mutationDoneMsg
+		m, _ = update(t, m, cmd())   // dayLoadedMsg
+		return m
+	}
+
+	m = runChain(m, 2000)
+	if !strings.Contains(m.render(), "500 kcal left") {
+		t.Errorf("after goal 2000 (1500 logged), expected '500 kcal left'")
+	}
+	m = runChain(m, 1800)
+	if !strings.Contains(m.render(), "300 kcal left") {
+		t.Errorf("after goal update to 1800, expected '300 kcal left' (dashboard did not refresh)")
 	}
 }
 

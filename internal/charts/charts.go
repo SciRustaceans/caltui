@@ -4,6 +4,7 @@
 package charts
 
 import (
+	"math"
 	"strings"
 
 	"github.com/guptarohit/asciigraph"
@@ -22,6 +23,37 @@ func LineChart(values []float64, height, width int, precision uint) string {
 		opts = append(opts, asciigraph.Width(width))
 	}
 	return asciigraph.Plot(values, opts...)
+}
+
+// ProjectionChart plots an actual series (blue) and a projected continuation
+// (coral) that begins where the actual data ends. The two are drawn as separate
+// colored lines via NaN-gap padding. Needs at least two actual points.
+func ProjectionChart(actual, projected []float64, height, width int, precision uint) string {
+	if len(actual) < 2 {
+		return ""
+	}
+	total := len(actual) + len(projected)
+	hist := make([]float64, total)
+	proj := make([]float64, total)
+	for i := 0; i < total; i++ {
+		hist[i] = math.NaN()
+		proj[i] = math.NaN()
+	}
+	copy(hist, actual)
+	// Anchor the projection to the last actual point so the lines connect.
+	proj[len(actual)-1] = actual[len(actual)-1]
+	for i, v := range projected {
+		proj[len(actual)+i] = v
+	}
+	opts := []asciigraph.Option{
+		asciigraph.Height(height),
+		asciigraph.Precision(precision),
+		asciigraph.SeriesColors(asciigraph.Blue, asciigraph.Coral),
+	}
+	if width > 0 {
+		opts = append(opts, asciigraph.Width(width))
+	}
+	return asciigraph.PlotMany([][]float64{hist, proj}, opts...)
 }
 
 var sparkRunes = []rune("▁▂▃▄▅▆▇█")

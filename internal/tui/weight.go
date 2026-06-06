@@ -243,7 +243,7 @@ func newWeightGoalModal(date, unit string, curKg float64, cur domain.WeightGoal,
 	ti := textinput.New()
 	ti.SetWidth(8)
 	ti.CharLimit = 6
-	rateIdx := 2 // maintain
+	rateIdx := defaultGoalIdx() // maintain
 	if has {
 		ti.SetValue(trimNum1(dispWeight(cur.TargetKg, unit)))
 		for i, o := range goalOptions {
