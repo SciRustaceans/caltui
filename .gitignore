@@ -1,0 +1,21 @@
+# Build output
+/bin/
+/dist/
+
+# Local data / scratch
+*.db
+*.db-wal
+*.db-shm
+/tmp/
+/.scratch/
+
+# ETL working files (raw USDA CSV downloads & intermediate db)
+/tools/etl/_data/
+/tools/etl/*.sqlite
+/tools/etl/*.zip
+
+# Editor / OS
+.DS_Store
+*.swp
+.idea/
+.vscode/

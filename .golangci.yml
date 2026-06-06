@@ -1,0 +1,20 @@
+version: "2"
+
+linters:
+  default: standard
+  enable:
+    - misspell
+    - revive
+    - unconvert
+    - bodyclose
+
+  exclusions:
+    rules:
+      # Test files may be a little looser.
+      - path: _test\.go
+        linters:
+          - revive
+
+formatters:
+  enable:
+    - gofmt
