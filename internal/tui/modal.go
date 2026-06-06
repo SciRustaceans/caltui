@@ -22,6 +22,9 @@ type closeModalMsg struct{}
 // saveEntryMsg asks the root to persist an entry: ID == 0 inserts, else updates.
 type saveEntryMsg struct{ entry domain.LogEntry }
 
+// saveGoalMsg asks the root to persist a goal.
+type saveGoalMsg struct{ goal domain.Goal }
+
 // mutationDoneMsg signals a store mutation finished; the root closes any modal,
 // records an error, and reloads the day.
 type mutationDoneMsg struct{ err error }
@@ -38,6 +41,15 @@ func (m Model) saveEntryCmd(e domain.LogEntry) tea.Cmd {
 		} else {
 			err = s.UpdateEntry(e)
 		}
+		return mutationDoneMsg{err: err}
+	}
+}
+
+// saveGoalCmd persists a goal (a new dated row).
+func (m Model) saveGoalCmd(g domain.Goal) tea.Cmd {
+	s := m.store
+	return func() tea.Msg {
+		_, err := s.AddGoal(g)
 		return mutationDoneMsg{err: err}
 	}
 }

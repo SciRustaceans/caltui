@@ -156,12 +156,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.entries, m.totals = msg.entries, msg.totals
 		m.recent, m.weekKcal = msg.recent, msg.weekKcal
 		m.clampDiaryCursor()
+		// First run: no goal yet -> launch the setup wizard.
+		if !m.hasGoal && m.modal == nil {
+			wm := newWizardModal(m.today, time.Now(), nil)
+			m.modal = wm
+			return m, wm.focusActive()
+		}
 		return m, nil
 	case closeModalMsg:
 		m.modal = nil
 		return m, nil
 	case saveEntryMsg:
 		return m, m.saveEntryCmd(msg.entry)
+	case saveGoalMsg:
+		return m, m.saveGoalCmd(msg.goal)
 	case mutationDoneMsg:
 		m.modal = nil
 		if msg.err != nil {
@@ -217,18 +225,31 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.clampDiaryCursor()
 		}
 		return m, nil
-	case key.Matches(msg, m.keys.Add), key.Matches(msg, m.keys.Search):
-		meal := domain.MealForHour(time.Now().Hour())
-		sm := newSearchModal(m.store, m.today, meal, m.recent)
-		m.modal = sm
-		return m, sm.focus()
+	case key.Matches(msg, m.keys.Add):
+		switch m.active {
+		case tabGoals:
+			return m.openWizard()
+		default:
+			return m.openFoodSearch()
+		}
+	case key.Matches(msg, m.keys.Search):
+		if m.active == tabDashboard || m.active == tabDiary {
+			return m.openFoodSearch()
+		}
+		return m, nil
 	case key.Matches(msg, m.keys.Edit):
-		if m.active == tabDiary {
+		switch m.active {
+		case tabDiary:
 			if e, ok := m.selectedEntry(); ok {
 				sm := newEditModal(m.today, e)
 				m.modal = sm
 				return m, sm.focus()
 			}
+		case tabGoals:
+			if m.hasGoal {
+				return m.openManualGoal()
+			}
+			return m.openWizard()
 		}
 		return m, nil
 	case key.Matches(msg, m.keys.Delete):
@@ -309,13 +330,22 @@ func (m Model) renderBody() string {
 	case tabDiary:
 		return m.viewDiary(m.width)
 	case tabGoals:
-		return m.placeholder("Goals", "Daily calorie & macro targets and the TDEE setup wizard live here.")
+		return m.viewGoals(m.width)
 	case tabWeight:
 		return m.placeholder("Weight", "Log body weight and track progress toward a goal here.")
 	case tabTrends:
 		return m.placeholder("Trends", "Calorie and weight charts over time live here.")
 	}
 	return ""
+}
+
+// openFoodSearch opens the food search/add modal with the meal defaulted by the
+// time of day.
+func (m Model) openFoodSearch() (tea.Model, tea.Cmd) {
+	meal := domain.MealForHour(time.Now().Hour())
+	sm := newSearchModal(m.store, m.today, meal, m.recent)
+	m.modal = sm
+	return m, sm.focus()
 }
 
 func (m Model) placeholder(title, desc string) string {
