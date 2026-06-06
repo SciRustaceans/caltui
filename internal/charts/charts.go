@@ -1,8 +1,28 @@
 // Package charts renders simple terminal charts: a single-line block sparkline
-// (used on the dashboard) and, later, full line charts for the trends screen.
+// (used on the dashboard) and multi-row ASCII line charts (used on the trends
+// screen, via asciigraph).
 package charts
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/guptarohit/asciigraph"
+)
+
+// LineChart renders values as a multi-row ASCII line chart with a left value
+// axis. height is the number of plot rows; width caps the plot columns (0 = one
+// column per point); precision is the number of decimals on the axis labels.
+// Fewer than two points renders nothing.
+func LineChart(values []float64, height, width int, precision uint) string {
+	if len(values) < 2 {
+		return ""
+	}
+	opts := []asciigraph.Option{asciigraph.Height(height), asciigraph.Precision(precision)}
+	if width > 0 {
+		opts = append(opts, asciigraph.Width(width))
+	}
+	return asciigraph.Plot(values, opts...)
+}
 
 var sparkRunes = []rune("▁▂▃▄▅▆▇█")
 

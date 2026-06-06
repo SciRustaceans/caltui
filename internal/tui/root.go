@@ -44,12 +44,13 @@ type Model struct {
 	today         string
 
 	// Cached data for the current day.
-	goal     domain.Goal
-	hasGoal  bool
-	entries  []domain.LogEntry
-	totals   domain.Macros
-	recent   []domain.Food
-	weekKcal []float64
+	goal      domain.Goal
+	hasGoal   bool
+	entries   []domain.LogEntry
+	totals    domain.Macros
+	recent    []domain.Food
+	weekKcal  []float64
+	trendKcal []float64
 
 	weights       []domain.Weight
 	weightGoal    domain.WeightGoal
@@ -81,12 +82,13 @@ func (m Model) Init() tea.Cmd { return m.loadDay() }
 
 // dayLoadedMsg carries the day's data loaded off the Update loop.
 type dayLoadedMsg struct {
-	goal     domain.Goal
-	hasGoal  bool
-	entries  []domain.LogEntry
-	totals   domain.Macros
-	recent   []domain.Food
-	weekKcal []float64
+	goal      domain.Goal
+	hasGoal   bool
+	entries   []domain.LogEntry
+	totals    domain.Macros
+	recent    []domain.Food
+	weekKcal  []float64
+	trendKcal []float64
 
 	weights       []domain.Weight
 	weightGoal    domain.WeightGoal
@@ -118,7 +120,11 @@ func (m Model) loadDay() tea.Cmd {
 			msg.err = err
 			return msg
 		}
-		if msg.weekKcal, err = weekSeries(s, date); err != nil {
+		if msg.weekKcal, err = kcalWindow(s, date, 7); err != nil {
+			msg.err = err
+			return msg
+		}
+		if msg.trendKcal, err = kcalWindow(s, date, trendDays); err != nil {
 			msg.err = err
 			return msg
 		}
@@ -144,19 +150,24 @@ func weightWindow(s *store.Store, date string, n int) ([]domain.Weight, error) {
 	return s.WeightSeries(from, date)
 }
 
-func weekSeries(s *store.Store, today string) ([]float64, error) {
+// trendDays is the window for the trends screen's calorie chart/table.
+const trendDays = 30
+
+// kcalWindow returns total calories per day for the last n days ending at today,
+// oldest first, with unlogged days as 0.
+func kcalWindow(s *store.Store, today string, n int) ([]float64, error) {
 	t, err := time.Parse("2006-01-02", today)
 	if err != nil {
 		return nil, err
 	}
-	from := t.AddDate(0, 0, -6).Format("2006-01-02")
+	from := t.AddDate(0, 0, -(n - 1)).Format("2006-01-02")
 	series, err := s.CalorieSeries(from, today)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]float64, 7)
-	for i := 0; i < 7; i++ {
-		d := t.AddDate(0, 0, -6+i).Format("2006-01-02")
+	out := make([]float64, n)
+	for i := 0; i < n; i++ {
+		d := t.AddDate(0, 0, -(n-1)+i).Format("2006-01-02")
 		out[i] = series[d]
 	}
 	return out, nil
@@ -182,6 +193,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.goal, m.hasGoal = msg.goal, msg.hasGoal
 		m.entries, m.totals = msg.entries, msg.totals
 		m.recent, m.weekKcal = msg.recent, msg.weekKcal
+		m.trendKcal = msg.trendKcal
 		m.weights = msg.weights
 		m.weightGoal, m.hasWeightGoal = msg.weightGoal, msg.hasWeightGoal
 		m.clampDiaryCursor()
@@ -371,7 +383,7 @@ func (m Model) renderBody() string {
 	case tabWeight:
 		return m.viewWeight(m.width)
 	case tabTrends:
-		return m.placeholder("Trends", "Calorie and weight charts over time live here.")
+		return m.viewTrends(m.width)
 	}
 	return ""
 }
@@ -383,10 +395,6 @@ func (m Model) openFoodSearch() (tea.Model, tea.Cmd) {
 	sm := newSearchModal(m.store, m.today, meal, m.recent)
 	m.modal = sm
 	return m, sm.focus()
-}
-
-func (m Model) placeholder(title, desc string) string {
-	return styleTitle.Render(title) + "\n\n" + styleDim.Render(desc)
 }
 
 func (m Model) prettyDate() string {
