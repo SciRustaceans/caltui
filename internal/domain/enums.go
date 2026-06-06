@@ -11,6 +11,7 @@ import (
 // Sex is the biological sex used by the Mifflin-St Jeor BMR equation.
 type Sex string
 
+// Sex values.
 const (
 	Male   Sex = "male"
 	Female Sex = "female"
@@ -22,6 +23,7 @@ func (s Sex) Valid() bool { return s == Male || s == Female }
 // ActivityLevel is a named TDEE activity multiplier bucket.
 type ActivityLevel string
 
+// ActivityLevel values, in ascending order of activity.
 const (
 	Sedentary        ActivityLevel = "sedentary"
 	LightlyActive    ActivityLevel = "lightly_active"
@@ -89,6 +91,7 @@ func ActivityLevelForMultiplier(m float64) (ActivityLevel, bool) {
 // Meal is a section of the daily diary.
 type Meal string
 
+// Meal values.
 const (
 	Breakfast Meal = "breakfast"
 	Lunch     Meal = "lunch"
@@ -144,6 +147,7 @@ func MealForHour(hour int) Meal {
 // FoodSource records where a food came from.
 type FoodSource string
 
+// FoodSource values.
 const (
 	SourceOfflineUSDA FoodSource = "usda_offline"
 	SourceOnlineUSDA  FoodSource = "usda_online"
@@ -155,6 +159,7 @@ const (
 // computing macros.
 type Unit string
 
+// Unit values.
 const (
 	UnitGram       Unit = "g"
 	UnitOunce      Unit = "oz"

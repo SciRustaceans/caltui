@@ -101,8 +101,10 @@ func KcalMismatch(m domain.Macros) (mismatch bool, computed float64) {
 	return math.Abs(m.Kcal-computed)/m.Kcal > KcalReconcileTolerance, computed
 }
 
-// LbToKg / KgToLb convert body weight between pounds and kilograms.
+// LbToKg converts pounds to kilograms.
 func LbToKg(lb float64) float64 { return lb * KgPerPound }
+
+// KgToLb converts kilograms to pounds.
 func KgToLb(kg float64) float64 { return kg / KgPerPound }
 
 // KJToKcal converts kilojoules to kilocalories (for energy values that arrive

@@ -8,6 +8,13 @@ linters:
     - unconvert
     - bodyclose
 
+  settings:
+    errcheck:
+      # Deferred Close on read handles / files is conventionally not checked.
+      exclude-functions:
+        - (*database/sql.Rows).Close
+        - (*os.File).Close
+
   exclusions:
     rules:
       # Test files may be a little looser.

@@ -106,7 +106,7 @@ func AgeFromDate(birthDate string, ref time.Time) (int, error) {
 	return years, nil
 }
 
-// BirthYearToDate converts a known age into an approximate birth date (Jan 1 of
+// BirthDateForAge converts a known age into an approximate birth date (Jan 1 of
 // the implied birth year), for storing a reproducible goal when the user enters
 // an age rather than a birthday.
 func BirthDateForAge(ageYears int, ref time.Time) string {
