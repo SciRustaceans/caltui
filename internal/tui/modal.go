@@ -25,6 +25,10 @@ type saveEntryMsg struct{ entry domain.LogEntry }
 // saveGoalMsg asks the root to persist a goal.
 type saveGoalMsg struct{ goal domain.Goal }
 
+// saveWeightMsg / saveWeightGoalMsg persist a weigh-in / weight goal.
+type saveWeightMsg struct{ weight domain.Weight }
+type saveWeightGoalMsg struct{ goal domain.WeightGoal }
+
 // mutationDoneMsg signals a store mutation finished; the root closes any modal,
 // records an error, and reloads the day.
 type mutationDoneMsg struct{ err error }
@@ -52,6 +56,18 @@ func (m Model) saveGoalCmd(g domain.Goal) tea.Cmd {
 		_, err := s.AddGoal(g)
 		return mutationDoneMsg{err: err}
 	}
+}
+
+// saveWeightCmd records (upserts) a weigh-in.
+func (m Model) saveWeightCmd(w domain.Weight) tea.Cmd {
+	s := m.store
+	return func() tea.Msg { return mutationDoneMsg{err: s.UpsertWeight(w)} }
+}
+
+// saveWeightGoalCmd records the weight goal.
+func (m Model) saveWeightGoalCmd(g domain.WeightGoal) tea.Cmd {
+	s := m.store
+	return func() tea.Msg { return mutationDoneMsg{err: s.SetWeightGoal(g)} }
 }
 
 // deleteEntryCmd removes a diary entry.

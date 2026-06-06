@@ -51,6 +51,10 @@ type Model struct {
 	recent   []domain.Food
 	weekKcal []float64
 
+	weights       []domain.Weight
+	weightGoal    domain.WeightGoal
+	hasWeightGoal bool
+
 	diaryCursor int
 	modal       modalModel
 	err         error
@@ -83,7 +87,12 @@ type dayLoadedMsg struct {
 	totals   domain.Macros
 	recent   []domain.Food
 	weekKcal []float64
-	err      error
+
+	weights       []domain.Weight
+	weightGoal    domain.WeightGoal
+	hasWeightGoal bool
+
+	err error
 }
 
 // loadDay returns a command that reads everything the views need for m.today.
@@ -113,8 +122,26 @@ func (m Model) loadDay() tea.Cmd {
 			msg.err = err
 			return msg
 		}
+		if msg.weights, err = weightWindow(s, date, 90); err != nil {
+			msg.err = err
+			return msg
+		}
+		if msg.weightGoal, msg.hasWeightGoal, err = s.GetWeightGoal(); err != nil {
+			msg.err = err
+			return msg
+		}
 		return msg
 	}
+}
+
+// weightWindow loads weigh-ins for the last n days ending at date.
+func weightWindow(s *store.Store, date string, n int) ([]domain.Weight, error) {
+	t, err := time.Parse("2006-01-02", date)
+	if err != nil {
+		return nil, err
+	}
+	from := t.AddDate(0, 0, -(n - 1)).Format("2006-01-02")
+	return s.WeightSeries(from, date)
 }
 
 func weekSeries(s *store.Store, today string) ([]float64, error) {
@@ -155,6 +182,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.goal, m.hasGoal = msg.goal, msg.hasGoal
 		m.entries, m.totals = msg.entries, msg.totals
 		m.recent, m.weekKcal = msg.recent, msg.weekKcal
+		m.weights = msg.weights
+		m.weightGoal, m.hasWeightGoal = msg.weightGoal, msg.hasWeightGoal
 		m.clampDiaryCursor()
 		// First run: no goal yet -> launch the setup wizard.
 		if !m.hasGoal && m.modal == nil {
@@ -170,6 +199,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.saveEntryCmd(msg.entry)
 	case saveGoalMsg:
 		return m, m.saveGoalCmd(msg.goal)
+	case saveWeightMsg:
+		return m, m.saveWeightCmd(msg.weight)
+	case saveWeightGoalMsg:
+		return m, m.saveWeightGoalCmd(msg.goal)
 	case mutationDoneMsg:
 		m.modal = nil
 		if msg.err != nil {
@@ -229,6 +262,8 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		switch m.active {
 		case tabGoals:
 			return m.openWizard()
+		case tabWeight:
+			return m.openWeightEntry()
 		default:
 			return m.openFoodSearch()
 		}
@@ -250,6 +285,8 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				return m.openManualGoal()
 			}
 			return m.openWizard()
+		case tabWeight:
+			return m.openWeightGoal()
 		}
 		return m, nil
 	case key.Matches(msg, m.keys.Delete):
@@ -332,7 +369,7 @@ func (m Model) renderBody() string {
 	case tabGoals:
 		return m.viewGoals(m.width)
 	case tabWeight:
-		return m.placeholder("Weight", "Log body weight and track progress toward a goal here.")
+		return m.viewWeight(m.width)
 	case tabTrends:
 		return m.placeholder("Trends", "Calorie and weight charts over time live here.")
 	}
