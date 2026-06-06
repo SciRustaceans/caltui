@@ -8,6 +8,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"caltui/internal/config"
+	"caltui/internal/food"
+	"caltui/internal/food/fdc"
 	"caltui/internal/store"
 	"caltui/internal/tui"
 )
@@ -20,6 +22,13 @@ func main() {
 }
 
 func run() error {
+	config.LoadDotEnv() // pick up FDC_API_KEY from a local .env, if present
+
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("loading config: %w", err)
+	}
+
 	dbPath, err := config.DBPath()
 	if err != nil {
 		return fmt.Errorf("resolving data directory: %w", err)
@@ -33,7 +42,13 @@ func run() error {
 	}
 	defer st.Close()
 
-	if _, err := tea.NewProgram(tui.New(st)).Run(); err != nil {
+	// Online USDA lookup is optional: enabled only when an API key is set.
+	var online food.Provider
+	if cfg.HasAPIKey() {
+		online = fdc.New(cfg.FDCAPIKey)
+	}
+
+	if _, err := tea.NewProgram(tui.New(st, online)).Run(); err != nil {
 		return err
 	}
 	return nil

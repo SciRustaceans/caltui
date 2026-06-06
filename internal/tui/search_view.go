@@ -67,6 +67,9 @@ func (sm *searchModal) searchView(w int) string {
 			b.WriteString("  " + styleText.Render(fmt.Sprintf("%-*s", nameW, name)) + " " + styleDim.Render(kcal) + "\n")
 		}
 	}
+	if sm.searching {
+		b.WriteString(styleDim.Render("· searching online…") + "\n")
+	}
 	if sm.msg != "" {
 		b.WriteString(styleWarn.Render(sm.msg) + "\n")
 	}

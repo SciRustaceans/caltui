@@ -2,11 +2,18 @@ BINARY := caltui
 PKG    := ./cmd/caltui
 BIN    := bin/$(BINARY)
 
-.PHONY: build run install test lint fmt vet tidy update-golden etl clean
+.PHONY: build run install test lint fmt vet tidy update-golden etl clean dist
 
-build: ## Build the binary into ./bin
+build: ## Build the binary into ./bin (native OS/arch)
 	@mkdir -p bin
 	go build -o $(BIN) $(PKG)
+
+dist: ## Cross-compile release binaries for macOS + Linux (pure Go, no CGo)
+	@mkdir -p dist
+	CGO_ENABLED=0 GOOS=darwin  GOARCH=arm64 go build -o dist/$(BINARY)-darwin-arm64 $(PKG)
+	CGO_ENABLED=0 GOOS=darwin  GOARCH=amd64 go build -o dist/$(BINARY)-darwin-amd64 $(PKG)
+	CGO_ENABLED=0 GOOS=linux   GOARCH=arm64 go build -o dist/$(BINARY)-linux-arm64  $(PKG)
+	CGO_ENABLED=0 GOOS=linux   GOARCH=amd64 go build -o dist/$(BINARY)-linux-amd64  $(PKG)
 
 run: ## Run the app
 	go run $(PKG)

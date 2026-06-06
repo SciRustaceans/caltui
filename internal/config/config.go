@@ -115,3 +115,29 @@ func Save(c Config) error {
 
 // HasAPIKey reports whether an online API key is configured.
 func (c Config) HasAPIKey() bool { return strings.TrimSpace(c.FDCAPIKey) != "" }
+
+// LoadDotEnv reads simple KEY=VALUE lines from a .env file in the current
+// directory (a developer convenience when running from the project) and sets
+// them in the process environment, without overriding variables already set.
+// A missing .env is not an error.
+func LoadDotEnv() {
+	data, err := os.ReadFile(".env")
+	if err != nil {
+		return
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		key, val, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		key = strings.TrimSpace(key)
+		val = strings.Trim(strings.TrimSpace(val), `"'`)
+		if key != "" && os.Getenv(key) == "" {
+			_ = os.Setenv(key, val)
+		}
+	}
+}

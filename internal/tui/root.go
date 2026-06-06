@@ -15,6 +15,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"caltui/internal/domain"
+	"caltui/internal/food"
 	"caltui/internal/store"
 	"caltui/internal/tui/keys"
 )
@@ -34,9 +35,10 @@ var tabNames = []string{"Dashboard", "Diary", "Goals", "Weight", "Trends"}
 
 // Model is the root Bubble Tea model.
 type Model struct {
-	store *store.Store
-	keys  keys.KeyMap
-	help  help.Model
+	store  *store.Store
+	online food.Provider
+	keys   keys.KeyMap
+	help   help.Model
 
 	width, height int
 	active        tab
@@ -61,9 +63,12 @@ type Model struct {
 	err         error
 }
 
-// New builds a root model backed by store s, showing today.
-func New(s *store.Store) Model {
-	return NewForDate(s, time.Now().Format("2006-01-02"))
+// New builds a root model backed by store s and an optional online provider
+// (nil for offline-only), showing today.
+func New(s *store.Store, online food.Provider) Model {
+	m := NewForDate(s, time.Now().Format("2006-01-02"))
+	m.online = online
+	return m
 }
 
 // NewForDate builds a root model for a specific date (used by tests).
@@ -393,6 +398,7 @@ func (m Model) renderBody() string {
 func (m Model) openFoodSearch() (tea.Model, tea.Cmd) {
 	meal := domain.MealForHour(time.Now().Hour())
 	sm := newSearchModal(m.store, m.today, meal, m.recent)
+	sm.online = m.online
 	m.modal = sm
 	return m, sm.focus()
 }

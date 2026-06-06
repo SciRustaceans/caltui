@@ -1,16 +1,29 @@
 package tui
 
 import (
+	"context"
 	"strconv"
 	"strings"
+	"time"
 
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 
 	"caltui/internal/domain"
+	"caltui/internal/food"
 	"caltui/internal/nutrition"
 	"caltui/internal/store"
 )
+
+// onlineDebounce is how long after the last keystroke we query the online API.
+const onlineDebounce = 350 * time.Millisecond
+
+// onlineTickMsg fires after the debounce; onlineResultsMsg delivers results.
+type onlineTickMsg struct{ gen int }
+type onlineResultsMsg struct {
+	gen     int
+	results []domain.Food
+}
 
 const (
 	stepSearch = iota
@@ -35,11 +48,14 @@ type searchModal struct {
 	msg   string
 
 	// search step
-	query   textinput.Model
-	results []domain.Food
-	recent  []domain.Food
-	cursor  int
-	gen     int
+	query         textinput.Model
+	results       []domain.Food
+	onlineResults []domain.Food
+	online        food.Provider
+	searching     bool
+	recent        []domain.Food
+	cursor        int
+	gen           int
 
 	// detail step
 	food         *domain.Food
@@ -104,6 +120,18 @@ func (sm *searchModal) Update(msg tea.Msg) (modalModel, tea.Cmd) {
 			}
 		}
 		return sm, nil
+	case onlineTickMsg:
+		if msg.gen == sm.gen && sm.online != nil && strings.TrimSpace(sm.query.Value()) != "" {
+			sm.searching = true
+			return sm, sm.onlineSearchCmd()
+		}
+		return sm, nil
+	case onlineResultsMsg:
+		if msg.gen == sm.gen {
+			sm.onlineResults = msg.results
+			sm.searching = false
+		}
+		return sm, nil
 	case tea.KeyPressMsg:
 		switch sm.step {
 		case stepSearch:
@@ -123,7 +151,36 @@ func (sm *searchModal) activeList() []domain.Food {
 	if strings.TrimSpace(sm.query.Value()) == "" {
 		return sm.recent
 	}
-	return sm.results
+	// Offline first, then online results not already present offline (by name).
+	list := append([]domain.Food{}, sm.results...)
+	seen := make(map[string]bool, len(sm.results))
+	for _, f := range sm.results {
+		seen[strings.ToLower(f.Name)] = true
+	}
+	for _, f := range sm.onlineResults {
+		if !seen[strings.ToLower(f.Name)] {
+			list = append(list, f)
+		}
+	}
+	return list
+}
+
+func (sm *searchModal) onlineDebounceCmd() tea.Cmd {
+	gen := sm.gen
+	return tea.Tick(onlineDebounce, func(time.Time) tea.Msg { return onlineTickMsg{gen: gen} })
+}
+
+func (sm *searchModal) onlineSearchCmd() tea.Cmd {
+	q, gen, online := sm.query.Value(), sm.gen, sm.online
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+		defer cancel()
+		res, err := online.Search(ctx, q, 15)
+		if err != nil {
+			return onlineResultsMsg{gen: gen, results: nil} // degrade silently to offline
+		}
+		return onlineResultsMsg{gen: gen, results: res}
+	}
 }
 
 func (sm *searchModal) clampCursor() {
@@ -171,13 +228,26 @@ func (sm *searchModal) updateSearch(msg tea.KeyPressMsg) (modalModel, tea.Cmd) {
 		if sm.query.Value() != prev {
 			sm.cursor = 0
 			sm.gen++
-			return sm, tea.Batch(cmd, sm.searchCmd())
+			sm.onlineResults = nil
+			sm.searching = false
+			cmds := []tea.Cmd{cmd, sm.searchCmd()}
+			if sm.online != nil && strings.TrimSpace(sm.query.Value()) != "" {
+				cmds = append(cmds, sm.onlineDebounceCmd())
+			}
+			return sm, tea.Batch(cmds...)
 		}
 		return sm, cmd
 	}
 }
 
 func (sm *searchModal) pickFood(f domain.Food) tea.Cmd {
+	// Cache an online result locally so it gets an id and becomes offline-
+	// searchable / eligible for recent & frequent.
+	if f.Source == domain.SourceOnlineUSDA && f.ID == 0 && sm.store != nil {
+		if id, err := sm.store.UpsertFoodByFDC(f); err == nil {
+			f.ID = id
+		}
+	}
 	food := f
 	sm.food = &food
 	sm.name = f.Name

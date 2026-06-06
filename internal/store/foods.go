@@ -108,6 +108,23 @@ func (s *Store) InsertFoods(foods []domain.Food) (int, error) {
 	return n, nil
 }
 
+// UpsertFoodByFDC returns the id of an existing food with the same fdc_id, or
+// inserts f and returns the new id. Used to cache online lookups locally so they
+// become offline-searchable and appear in recent/frequent.
+func (s *Store) UpsertFoodByFDC(f domain.Food) (int64, error) {
+	if f.FDCID != nil {
+		var id int64
+		err := s.db.QueryRow(`SELECT id FROM foods WHERE fdc_id = ?`, *f.FDCID).Scan(&id)
+		if err == nil {
+			return id, nil
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return 0, err
+		}
+	}
+	return s.InsertFood(f)
+}
+
 // DeleteFood removes a food. Diary entries that referenced it keep their macro
 // snapshot; their food_id becomes NULL (ON DELETE SET NULL).
 func (s *Store) DeleteFood(id int64) error {
