@@ -57,6 +57,8 @@ type searchModal struct {
 	recent        []domain.Food
 	savedMeals    []domain.SavedMeal
 	cursor        int
+	scroll        int // index of the first visible row
+	viewHeight    int // terminal height, for sizing the scroll window
 	gen           int
 
 	// detail step
@@ -136,6 +138,9 @@ func (sm *searchModal) Update(msg tea.Msg) (modalModel, tea.Cmd) {
 			sm.onlineResults = msg.results
 			sm.searching = false
 		}
+		return sm, nil
+	case tea.WindowSizeMsg:
+		sm.viewHeight = msg.Height
 		return sm, nil
 	case tea.KeyPressMsg:
 		switch sm.step {
@@ -218,6 +223,37 @@ func (sm *searchModal) clampCursor() {
 	if sm.cursor < 0 {
 		sm.cursor = 0
 	}
+	sm.adjustScroll()
+}
+
+// visibleRows is how many result rows fit, derived from the terminal height so
+// the list expands on taller terminals. Defaults sanely before the first
+// WindowSizeMsg.
+func (sm *searchModal) visibleRows() int {
+	v := sm.viewHeight - 13 // tab bar, footer, box chrome, hints
+	switch {
+	case sm.viewHeight <= 0:
+		return 8
+	case v < 4:
+		return 4
+	case v > 12:
+		return 12
+	default:
+		return v
+	}
+}
+
+// adjustScroll keeps the cursor inside the visible window.
+func (sm *searchModal) adjustScroll() {
+	v := sm.visibleRows()
+	if sm.cursor < sm.scroll {
+		sm.scroll = sm.cursor
+	} else if sm.cursor >= sm.scroll+v {
+		sm.scroll = sm.cursor - v + 1
+	}
+	if sm.scroll < 0 {
+		sm.scroll = 0
+	}
 }
 
 func (sm *searchModal) searchCmd() tea.Cmd {
@@ -270,6 +306,7 @@ func (sm *searchModal) updateSearch(msg tea.KeyPressMsg) (modalModel, tea.Cmd) {
 		sm.query, cmd = sm.query.Update(msg)
 		if sm.query.Value() != prev {
 			sm.cursor = 0
+			sm.scroll = 0
 			sm.gen++
 			sm.onlineResults = nil
 			sm.searching = false

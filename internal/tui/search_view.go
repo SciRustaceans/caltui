@@ -47,26 +47,39 @@ func (sm *searchModal) searchView(w int) string {
 
 	if len(rows) == 0 {
 		if blank {
-			b.WriteString(styleFaint.Render("  Nothing yet — start typing.\n"))
+			b.WriteString(styleFaint.Render("  Nothing yet — start typing.") + "\n")
 		} else {
-			b.WriteString(styleFaint.Render("  No matches. Press ctrl+a to quick-add.\n"))
+			b.WriteString(styleFaint.Render("  No matches. Press ctrl+a to quick-add.") + "\n")
 		}
 	}
-	limit := 8
-	for i, r := range rows {
-		if i >= limit {
-			b.WriteString(styleFaint.Render(fmt.Sprintf("  …and %d more\n", len(rows)-limit)))
-			break
-		}
+
+	// Scrolling window around the cursor.
+	visible := sm.visibleRows()
+	start := sm.scroll
+	if start > len(rows)-visible {
+		start = len(rows) - visible
+	}
+	if start < 0 {
+		start = 0
+	}
+	end := start + visible
+	if end > len(rows) {
+		end = len(rows)
+	}
+	if start > 0 {
+		b.WriteString(styleFaint.Render(fmt.Sprintf("  ↑ %d more", start)) + "\n")
+	}
+	for i := start; i < end; i++ {
+		r := rows[i]
 		var name, right string
 		if r.meal != nil {
-			name = truncate(r.meal.Name, w-2-1-12)
 			right = fmt.Sprintf("recipe %d kcal", int(r.meal.Total().Kcal+0.5))
+			name = truncate(r.meal.Name, w-2-1-len(right))
 		} else {
 			right = fmt.Sprintf("%d/100g", int(r.food.Per100g.Kcal+0.5))
 			name = truncate(r.food.Name, w-2-1-len(right))
 		}
-		nameW := w - 2 - 1 - len(right)
+		nameW := w - 4 - len(right) // 2 cursor + 1 gap + 1 safety margin
 		if nameW < 8 {
 			nameW = 8
 		}
@@ -75,6 +88,9 @@ func (sm *searchModal) searchView(w int) string {
 		} else {
 			b.WriteString("  " + styleText.Render(fmt.Sprintf("%-*s", nameW, name)) + " " + styleDim.Render(right) + "\n")
 		}
+	}
+	if end < len(rows) {
+		b.WriteString(styleFaint.Render(fmt.Sprintf("  ↓ %d more", len(rows)-end)) + "\n")
 	}
 	if sm.searching {
 		b.WriteString(styleDim.Render("· searching online…") + "\n")

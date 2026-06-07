@@ -436,6 +436,7 @@ func (m Model) openFoodSearch() (tea.Model, tea.Cmd) {
 	sm := newSearchModal(m.store, m.today, meal, m.recent)
 	sm.online = m.online
 	sm.savedMeals = m.savedMeals
+	sm.viewHeight = m.height
 	m.modal = sm
 	return m, sm.focus()
 }
