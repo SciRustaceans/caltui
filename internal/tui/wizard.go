@@ -20,21 +20,21 @@ type goalOption struct {
 }
 
 var goalOptions = []goalOption{
-	{"Lose 3 kg/week", -3.0},
 	{"Lose 2.5 kg/week", -2.5},
 	{"Lose 2 kg/week", -2.0},
 	{"Lose 1.5 kg/week", -1.5},
 	{"Lose 1 kg/week", -1.0},
+	{"Lose 0.75 kg/week", -0.75},
 	{"Lose 0.5 kg/week", -0.5},
 	{"Lose 0.25 kg/week", -0.25},
 	{"Maintain weight", 0},
 	{"Gain 0.25 kg/week", 0.25},
 	{"Gain 0.5 kg/week", 0.5},
+	{"Gain 0.75 kg/week", 0.75},
 	{"Gain 1 kg/week", 1.0},
 	{"Gain 1.5 kg/week", 1.5},
 	{"Gain 2 kg/week", 2.0},
 	{"Gain 2.5 kg/week", 2.5},
-	{"Gain 3 kg/week", 3.0},
 }
 
 // defaultGoalIdx returns the index of the "maintain" option (rate 0).
@@ -224,7 +224,8 @@ func (w *wizardModal) submit() (modalModel, tea.Cmd) {
 		GoalRate:      goalOptions[w.goalIdx].rate,
 		Manual:        false,
 	}
-	return w, func() tea.Msg { return saveGoalMsg{goal: goal} }
+	weight := domain.Weight{Date: w.date, Kg: goal.WeightKg, Unit: "kg"}
+	return w, func() tea.Msg { return saveSetupMsg{goal: goal, weight: weight} }
 }
 
 func (w *wizardModal) View(width, _ int) string {

@@ -16,6 +16,7 @@ import (
 
 	"caltui/internal/domain"
 	"caltui/internal/food"
+	"caltui/internal/food/fdc"
 	"caltui/internal/nutrition"
 	"caltui/internal/store"
 	"caltui/internal/tui/keys"
@@ -63,7 +64,9 @@ type Model struct {
 
 	diaryCursor  int
 	modal        modalModel
+	firstRun     bool // no goal existed at startup (drives onboarding)
 	promptedGoal bool // first-run wizard has been offered (don't re-pop)
+	promptedKey  bool // first-run API-key prompt has been offered
 	err          error
 }
 
@@ -221,12 +224,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.intakeByDay = msg.intakeByDay
 		m.savedMeals = msg.savedMeals
 		m.clampDiaryCursor()
-		// First run: offer the setup wizard once (don't re-pop on later reloads).
+		// Onboarding, step 1: no goal yet -> TDEE wizard (once).
 		if !m.hasGoal && m.modal == nil && !m.promptedGoal {
 			m.promptedGoal = true
+			m.firstRun = true
 			wm := newWizardModal(m.today, time.Now(), nil)
 			m.modal = wm
 			return m, wm.focusActive()
+		}
+		// Onboarding, step 2 (first run only): offer the API-key setup once.
+		if m.firstRun && m.online == nil && m.modal == nil && !m.promptedKey {
+			m.promptedKey = true
+			km := newAPIKeyModal()
+			m.modal = km
+			return m, km.focus()
 		}
 		return m, nil
 	case closeModalMsg:
@@ -236,10 +247,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.saveEntryCmd(msg.entry)
 	case saveGoalMsg:
 		return m, m.saveGoalCmd(msg.goal)
+	case saveSetupMsg:
+		return m, m.saveSetupCmd(msg.goal, msg.weight)
 	case saveWeightMsg:
 		return m, m.saveWeightCmd(msg.weight)
 	case saveWeightGoalMsg:
 		return m, m.saveWeightGoalCmd(msg.goal)
+	case onlineEnabledMsg:
+		m.online = fdc.New(msg.key)
+		return m, nil
 	case saveMealMsg:
 		return m, m.saveMealCmd(msg.meal)
 	case logSavedMealMsg:
@@ -349,6 +365,13 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m.applyMaintenance()
 		}
 		return m, nil
+	case key.Matches(msg, m.keys.APIKey):
+		if m.active == tabGoals {
+			km := newAPIKeyModal()
+			m.modal = km
+			return m, km.focus()
+		}
+		return m, nil
 	case key.Matches(msg, m.keys.Save):
 		if m.active == tabDiary {
 			return m.openSaveMeal()
@@ -379,7 +402,7 @@ func (m Model) render() string {
 	if m.modal != nil {
 		body = lipgloss.Place(m.width, bodyHeight, lipgloss.Center, lipgloss.Center, m.modal.View(m.width, bodyHeight))
 	} else {
-		body = lipgloss.NewStyle().Width(m.width).Height(bodyHeight).Render(m.renderBody())
+		body = lipgloss.NewStyle().Width(m.width).Height(bodyHeight).Render(m.renderBody(bodyHeight))
 	}
 	return lipgloss.JoinVertical(lipgloss.Left, header, body, footer)
 }
@@ -413,12 +436,12 @@ func (m Model) renderFooter() string {
 	return rule + "\n" + m.help.ShortHelpView(m.keys.ShortHelp())
 }
 
-func (m Model) renderBody() string {
+func (m Model) renderBody(height int) string {
 	switch m.active {
 	case tabDashboard:
 		return m.viewDashboard(m.width)
 	case tabDiary:
-		return m.viewDiary(m.width)
+		return m.viewDiary(m.width, height)
 	case tabGoals:
 		return m.viewGoals(m.width)
 	case tabWeight:

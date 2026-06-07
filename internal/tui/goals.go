@@ -73,7 +73,13 @@ func (m *Model) viewGoals(_ int) string {
 		b.WriteString(styleFaint.Render("m: set goal from this estimate") + "\n")
 	}
 
-	b.WriteString("\n" + styleFaint.Render("a re-run wizard · e edit manually"))
+	b.WriteString("\n")
+	if m.online != nil {
+		b.WriteString(styleGood.Render("● Online food lookup: on") + "\n")
+	} else {
+		b.WriteString(styleDim.Render("○ Online food lookup: off — press k to connect") + "\n")
+	}
+	b.WriteString("\n" + styleFaint.Render("a re-run wizard · e edit manually · k API key"))
 	return b.String()
 }
 

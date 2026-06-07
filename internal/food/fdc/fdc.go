@@ -38,6 +38,16 @@ func New(apiKey string) *Client {
 // Name identifies this provider.
 func (c *Client) Name() string { return "usda" }
 
+// Validate confirms the API key works by issuing a tiny live search. It returns
+// nil when the key is accepted, or an error (rejected key, rate limit, network).
+func (c *Client) Validate(ctx context.Context) error {
+	if c.apiKey == "" {
+		return fmt.Errorf("fdc: no API key")
+	}
+	_, err := c.Search(ctx, "apple", 1)
+	return err
+}
+
 type searchRequest struct {
 	Query    string   `json:"query"`
 	DataType []string `json:"dataType"`

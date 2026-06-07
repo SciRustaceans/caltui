@@ -9,42 +9,82 @@ import (
 )
 
 // viewDiary renders the meal-grouped diary for the current day with a selection
-// cursor over entries. The width parameter is reserved for future column
-// layout; the diary currently lays out at a fixed content width.
-func (m *Model) viewDiary(_ int) string {
-	var b strings.Builder
-	b.WriteString(styleTitle.Render("Diary — "+m.prettyDate()) +
-		"  " + styleDim.Render(fmtInt(m.totals.Kcal)+" kcal") + "\n\n")
+// cursor over entries. The body scrolls (keeping the selected entry in view)
+// when it doesn't fit in the available height.
+func (m *Model) viewDiary(_, height int) string {
+	title := styleTitle.Render("Diary — "+m.prettyDate()) +
+		"  " + styleDim.Render(fmtInt(m.totals.Kcal)+" kcal")
 
+	var lines []string
+	cursorLine := 0
 	for _, meal := range domain.MealsInOrder {
 		items := m.entriesForMeal(meal)
 		var mealTot domain.Macros
 		for _, it := range items {
 			mealTot = mealTot.Add(it.entry.Total())
 		}
-		head := styleText.Bold(true).Render(strings.ToUpper(string(meal)))
-		b.WriteString(head + "  " + styleDim.Render(fmtInt(mealTot.Kcal)+" kcal") + "\n")
-
+		lines = append(lines, styleText.Bold(true).Render(strings.ToUpper(string(meal)))+
+			"  "+styleDim.Render(fmtInt(mealTot.Kcal)+" kcal"))
 		if len(items) == 0 {
-			b.WriteString("  " + styleFaint.Render("(empty · press a to add)") + "\n\n")
+			lines = append(lines, "  "+styleFaint.Render("(empty · press a to add)"), "")
 			continue
 		}
 		for _, it := range items {
-			selected := m.active == tabDiary && it.index == m.diaryCursor
-			cursor := "  "
 			line := entryLine(it.entry)
-			if selected {
+			cursor := "  "
+			if m.active == tabDiary && it.index == m.diaryCursor {
 				cursor = styleSelected.Render("❯ ")
 				line = styleSelected.Render(line)
+				cursorLine = len(lines)
 			}
-			b.WriteString(cursor + line + "\n")
+			lines = append(lines, cursor+line)
 		}
-		b.WriteString("\n")
+		lines = append(lines, "")
 	}
 	if len(m.entries) == 0 {
-		b.WriteString(styleDim.Render("Nothing logged today. Press a to add a food.\n"))
+		lines = append(lines, styleDim.Render("Nothing logged today. Press a to add a food."))
 	}
-	return b.String()
+
+	// Title + blank line are a fixed header; the rest scrolls.
+	return title + "\n\n" + strings.Join(windowLines(lines, cursorLine, height-2), "\n")
+}
+
+// windowLines returns a slice of at most height lines centered on focus, with
+// "↑ N more" / "↓ N more" indicators replacing the edge lines when content is
+// hidden. The focus line is always kept visible.
+func windowLines(lines []string, focus, height int) []string {
+	if height < 1 {
+		height = 1
+	}
+	if len(lines) <= height {
+		return lines
+	}
+	start := focus - height/2
+	if start < 0 {
+		start = 0
+	}
+	if maxStart := len(lines) - height; start > maxStart {
+		start = maxStart
+	}
+	end := start + height
+
+	out := make([]string, 0, height)
+	i := start
+	if start > 0 {
+		out = append(out, styleFaint.Render(fmt.Sprintf("  ↑ %d more", start)))
+		i++ // the top line becomes the indicator
+	}
+	stop := end
+	if end < len(lines) {
+		stop-- // reserve the bottom line for the indicator
+	}
+	for ; i < stop; i++ {
+		out = append(out, lines[i])
+	}
+	if end < len(lines) {
+		out = append(out, styleFaint.Render(fmt.Sprintf("  ↓ %d more", len(lines)-end)))
+	}
+	return out
 }
 
 // indexedEntry pairs an entry with its global index in m.entries (the cursor

@@ -49,9 +49,9 @@ func TestWizardComputeAndSave(t *testing.T) {
 	}
 
 	_, cmd := w.Update(press("enter"))
-	save, ok := cmd().(saveGoalMsg)
+	save, ok := cmd().(saveSetupMsg)
 	if !ok {
-		t.Fatal("expected saveGoalMsg")
+		t.Fatal("expected saveSetupMsg")
 	}
 	g := save.goal
 	if g.Sex != domain.Female || g.WeightKg != 82 || g.HeightCm != 180 || g.GoalRate != -0.5 {
@@ -62,6 +62,10 @@ func TestWizardComputeAndSave(t *testing.T) {
 	}
 	if g.Target.Kcal != math.Round(exp.Kcal) {
 		t.Errorf("goal target = %g, want %g (rounded)", g.Target.Kcal, math.Round(exp.Kcal))
+	}
+	// The entered weight is logged as a weigh-in during setup.
+	if save.weight.Kg != 82 || save.weight.Unit != "kg" || save.weight.Date != "2026-06-06" {
+		t.Errorf("setup should record the entered weight, got %+v", save.weight)
 	}
 }
 
@@ -105,16 +109,23 @@ func TestFirstRunOpensWizard(t *testing.T) {
 	s := testStore(t)
 	m := NewForDate(s, "2026-06-06")
 	m.width, m.height = 100, 30
-	// A day load with no goal should pop the wizard.
+	// Step 1: a day load with no goal pops the TDEE wizard.
 	m, _ = update(t, m, dayLoadedMsg{hasGoal: false})
 	if _, ok := m.modal.(*wizardModal); !ok {
-		t.Errorf("expected wizard modal on first run, got %T", m.modal)
+		t.Fatalf("expected wizard modal on first run, got %T", m.modal)
 	}
-	// Dismiss it; a later reload with still-no-goal must NOT re-pop the wizard.
+	// Step 2: after the wizard is dismissed, onboarding offers the API-key modal
+	// (not the wizard again).
+	m, _ = update(t, m, closeModalMsg{})
+	m, _ = update(t, m, dayLoadedMsg{hasGoal: false})
+	if _, ok := m.modal.(*apiKeyModal); !ok {
+		t.Fatalf("expected API-key modal as onboarding step 2, got %T", m.modal)
+	}
+	// Once both have been offered, nothing re-pops.
 	m, _ = update(t, m, closeModalMsg{})
 	m, _ = update(t, m, dayLoadedMsg{hasGoal: false})
 	if m.modal != nil {
-		t.Errorf("wizard should not re-open after being dismissed once, got %T", m.modal)
+		t.Errorf("onboarding should be complete, got %T", m.modal)
 	}
 }
 

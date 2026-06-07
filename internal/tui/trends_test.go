@@ -77,8 +77,9 @@ func TestWeightProjectionFlatSkipped(t *testing.T) {
 	}
 }
 
-func TestGoalOptionsMirrorTo3(t *testing.T) {
+func TestGoalOptionsMirror(t *testing.T) {
 	var minRate, maxRate float64
+	has := map[float64]bool{}
 	for _, o := range goalOptions {
 		if o.rate < minRate {
 			minRate = o.rate
@@ -86,29 +87,18 @@ func TestGoalOptionsMirrorTo3(t *testing.T) {
 		if o.rate > maxRate {
 			maxRate = o.rate
 		}
+		has[o.rate] = true
 	}
-	if minRate != -3.0 {
-		t.Errorf("expected a -3 kg/week loss option, min = %g", minRate)
+	if minRate != -2.5 || maxRate != 2.5 {
+		t.Errorf("rates should span ±2.5, got [%g, %g]", minRate, maxRate)
 	}
-	if maxRate != 3.0 {
-		t.Errorf("gain should mirror loss to +3 kg/week, max = %g", maxRate)
+	if has[-3] || has[3] {
+		t.Errorf("3 kg/week options should have been removed")
+	}
+	if !has[-0.75] || !has[0.75] {
+		t.Errorf("0.75 kg/week options should exist (lose %v, gain %v)", has[-0.75], has[0.75])
 	}
 	if goalOptions[defaultGoalIdx()].rate != 0 {
 		t.Errorf("default goal option should be maintain (rate 0)")
-	}
-	// Loss and gain must mirror at 1, 1.5, 2, 2.5, 3.
-	want := map[float64]bool{
-		-1: false, -1.5: false, -2: false, -2.5: false, -3: false,
-		1: false, 1.5: false, 2: false, 2.5: false, 3: false,
-	}
-	for _, o := range goalOptions {
-		if _, ok := want[o.rate]; ok {
-			want[o.rate] = true
-		}
-	}
-	for r, present := range want {
-		if !present {
-			t.Errorf("missing option for %g kg/week", r)
-		}
 	}
 }

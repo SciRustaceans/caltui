@@ -84,6 +84,7 @@ func TestWeightPaceUpdatesDashboardE2E(t *testing.T) {
 	tm.Send(press("tab"))  // -> pace
 	tm.Send(press("left")) // maintain -> lose 0.25
 	tm.Send(press("left")) // -> lose 0.5
+	tm.Send(press("left")) // -> lose 0.75
 	tm.Send(press("left")) // -> lose 1
 	tm.Send(press("enter"))
 

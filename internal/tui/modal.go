@@ -26,6 +26,13 @@ type saveEntryMsg struct{ entry domain.LogEntry }
 // saveGoalMsg asks the root to persist a goal.
 type saveGoalMsg struct{ goal domain.Goal }
 
+// saveSetupMsg persists the first-run wizard result: the goal AND the entered
+// body weight as a weigh-in, so setup populates the weight tracker.
+type saveSetupMsg struct {
+	goal   domain.Goal
+	weight domain.Weight
+}
+
 // saveWeightMsg / saveWeightGoalMsg persist a weigh-in / weight goal.
 type saveWeightMsg struct{ weight domain.Weight }
 type saveWeightGoalMsg struct{ goal domain.WeightGoal }
@@ -64,6 +71,23 @@ func (m Model) saveGoalCmd(g domain.Goal) tea.Cmd {
 	return func() tea.Msg {
 		_, err := s.AddGoal(g)
 		return mutationDoneMsg{err: err}
+	}
+}
+
+// saveSetupCmd persists the wizard's goal and records the entered weight as
+// today's weigh-in (so the weight tracker is seeded during setup).
+func (m Model) saveSetupCmd(g domain.Goal, w domain.Weight) tea.Cmd {
+	s := m.store
+	return func() tea.Msg {
+		if _, err := s.AddGoal(g); err != nil {
+			return mutationDoneMsg{err: err}
+		}
+		if w.Kg > 0 {
+			if err := s.UpsertWeight(w); err != nil {
+				return mutationDoneMsg{err: err}
+			}
+		}
+		return mutationDoneMsg{err: nil}
 	}
 }
 
