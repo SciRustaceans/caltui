@@ -29,7 +29,7 @@ func (m *Model) viewTrends(width int) string {
 	b.WriteString(m.weeklyBars())
 
 	b.WriteString("\n" + styleDim.Render("Weight") + "\n")
-	b.WriteString(m.weightChart(chartW))
+	b.WriteString(m.weightChart(chartW, 6))
 
 	b.WriteString("\n" + styleDim.Render("Recent days") + "\n")
 	b.WriteString(m.historyTable())
@@ -86,8 +86,10 @@ func (m *Model) weeklyBars() string {
 }
 
 // weightChart renders the weight series with a projected continuation when a
-// trend can be inferred; otherwise a plain line.
-func (m *Model) weightChart(chartW int) string {
+// trend can be inferred; otherwise a plain line. chartH is the number of plot
+// rows: a taller chart renders a shallow trend as a smooth diagonal instead of a
+// coarse staircase.
+func (m *Model) weightChart(chartW, chartH int) string {
 	if len(m.weights) < 2 {
 		return styleFaint.Render("  Log a few weigh-ins to see a trend.\n")
 	}
@@ -99,13 +101,13 @@ func (m *Model) weightChart(chartW int) string {
 
 	projKg, weeklyKg, weeks, ok := m.weightProjection()
 	if !ok {
-		return charts.LineChart(actual, 6, chartW, 1) + "\n"
+		return charts.LineChart(actual, chartH, chartW, 1) + "\n"
 	}
 	proj := make([]float64, len(projKg))
 	for i, v := range projKg {
 		proj[i] = dispWeight(v, unit)
 	}
-	chart := charts.ProjectionChart(actual, proj, 6, chartW, 1)
+	chart := charts.ProjectionChart(actual, proj, chartH, chartW, 1)
 
 	arrow := "↓"
 	if weeklyKg > 0 {

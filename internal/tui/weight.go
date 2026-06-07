@@ -6,9 +6,7 @@ import (
 
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 
-	"caltui/internal/charts"
 	"caltui/internal/domain"
 	"caltui/internal/nutrition"
 )
@@ -35,7 +33,7 @@ func dispWeight(kg float64, unit string) float64 {
 
 func trimNum1(f float64) string { return fmt.Sprintf("%.1f", f) }
 
-func (m *Model) viewWeight(_ int) string {
+func (m *Model) viewWeight(width int) string {
 	if len(m.weights) == 0 {
 		return styleTitle.Render("Weight") + "\n\n" +
 			styleDim.Render("No weigh-ins yet.\nPress a to log your weight, or e to set a goal.")
@@ -58,14 +56,31 @@ func (m *Model) viewWeight(_ int) string {
 		}
 		b.WriteString("  " + st.Render(fmt.Sprintf("%s %s", arrow, trimNum1(absf(d)))))
 	}
-	b.WriteString("\n")
+	b.WriteString("\n\n")
 
-	// Sparkline of the series (kg values; relative shape is unit-agnostic).
-	vals := make([]float64, len(m.weights))
-	for i, w := range m.weights {
-		vals[i] = w.Kg
+	// Weight plot with the projected trend toward the goal (same chart as the
+	// Trends tab). Falls back to a plain line or a hint when there isn't enough
+	// data to infer a trend.
+	chartW := width - 14
+	if chartW > 80 {
+		chartW = 80
 	}
-	b.WriteString(lipgloss.NewStyle().Foreground(colCalorie).Render(charts.Sparkline(vals)) + "\n\n")
+	if chartW < 20 {
+		chartW = 20
+	}
+	// A taller plot renders a shallow trend as a smooth diagonal rather than a
+	// coarse staircase. Use the vertical space available on this tab, leaving
+	// room for the header, goal block, recent list and footer.
+	chartH := 14
+	if m.height > 0 {
+		if h := m.height - 16; h < chartH {
+			chartH = h
+		}
+	}
+	if chartH < 6 {
+		chartH = 6
+	}
+	b.WriteString(m.weightChart(chartW, chartH) + "\n")
 
 	if m.hasWeightGoal {
 		g := m.weightGoal

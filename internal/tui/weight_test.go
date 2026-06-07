@@ -132,6 +132,28 @@ func TestWeightView(t *testing.T) {
 			t.Errorf("weight view missing %q", want)
 		}
 	}
+	// The Weight tab must show the projection plot (not just the goal bar).
+	if !strings.Contains(out, "projected") {
+		t.Errorf("weight view should render the weight projection chart:\n%s", out)
+	}
+}
+
+// TestWeightViewProjectionTwoPoints reproduces the reported case: exactly two
+// weigh-ins one day apart with a goal set. The projection must render on the
+// Weight tab (weightProjection returns ok=true at the 1-day boundary).
+func TestWeightViewProjectionTwoPoints(t *testing.T) {
+	m := sampleModel()
+	m.active = tabWeight
+	m.weights = []domain.Weight{
+		{Date: "2026-06-06", Kg: 130.0, Unit: "kg"},
+		{Date: "2026-06-07", Kg: 129.3, Unit: "kg"},
+	}
+	m.hasWeightGoal = true
+	m.weightGoal = domain.WeightGoal{TargetKg: 100, Unit: "kg", RatePerWeek: -0.5, StartKg: 130.0}
+	out := m.viewWeight(100)
+	if !strings.Contains(out, "projected") {
+		t.Errorf("two weigh-ins one day apart should still project on the Weight tab:\n%s", out)
+	}
 }
 
 func TestWeightTabKeysOpenModals(t *testing.T) {
