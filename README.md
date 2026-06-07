@@ -2,19 +2,43 @@
 
 MyFitnessPal in a TUI. Offline-first, single-user, local SQLite. Tracks calories
 plus protein/carbs/fat, with daily goals, custom foods & saved meals, body-weight
-tracking, and history/trend charts.
+tracking, and history/trend charts. Runs on **macOS, Linux, and Windows**.
 
-## Status
+![caltui dashboard](docs/img/dashboard.png)
 
-Under active construction. See the implementation plan for the phased build.
+## Screens
+
+| Diary — meal-grouped logging | Trends — weekly bars & weight projection |
+| :---: | :---: |
+| ![Diary](docs/img/diary.png) | ![Trends](docs/img/trends.png) |
+| **Goals — TDEE wizard + adaptive maintenance** | **Add food — search, recipes & custom foods** |
+| ![Goals](docs/img/goals.png) | ![Add food](docs/img/search.png) |
+
+> Screenshots are rendered from the real UI (shown in a modern terminal such as
+> Windows Terminal, iTerm2, or any xterm-compatible terminal).
 
 ## Quick start
 
+Requires Go >= 1.25 (built with 1.26). Pure-Go SQLite — no CGo, Xcode, or C
+toolchain needed on any platform.
+
+**macOS / Linux:**
+
 ```bash
-# Requires Go >= 1.25 (this repo was built with 1.26).
-make build        # -> ./bin/caltui   (pure-Go SQLite; no CGo/Xcode needed)
-go run ./cmd/caltui
+make build          # -> ./bin/caltui
+./bin/caltui        # or: go run ./cmd/caltui
 ```
+
+**Windows (PowerShell):**
+
+```powershell
+go build -o bin\caltui.exe .\cmd\caltui
+.\bin\caltui.exe    # or: go run .\cmd\caltui
+```
+
+Run caltui in **Windows Terminal** (or any modern terminal) for correct
+Unicode/colour rendering. Prebuilt binaries for every platform come from
+`make dist` — see [Deployment](#deployment-macos-linux--windows).
 
 First run launches a short setup wizard (a TDEE calculator) that suggests daily
 calorie and macro targets you can edit anytime.
@@ -29,7 +53,8 @@ calorie and macro targets you can edit anytime.
   1. `FDC_API_KEY` environment variable;
   2. a `.env` file in the working directory with `FDC_API_KEY=...` (auto-loaded;
      copy `.env.example`);
-  3. `fdc_api_key` in the config file (`~/.config/tuitracker/config.toml`).
+  3. `fdc_api_key` in the config file (`~/.config/tuitracker/config.toml`, or
+     `%AppData%\tuitracker\config.toml` on Windows).
 
   Without a key the app runs offline-only.
 
@@ -51,8 +76,13 @@ environment or `fdc_api_key` in the config file.
 
 ## Keys
 
-Arrows or vim `hjkl` to move; `1`–`4` switch tabs; `a` add, `d` delete, `e` edit,
-`/` search, `?` help, `q` quit.
+- Move: arrows or vim `hjkl` · switch tabs: `1`–`5`, `tab`/`shift+tab`
+- `a` add food · `/` search · `e` edit · `d` delete · `y` copy yesterday
+- `s` save a meal as a recipe (Diary) · `m` set goal from maintenance estimate (Goals)
+- In food search: `ctrl+f` new custom food · `ctrl+a` quick-add · `ctrl+d` delete recipe
+- `?` help · `q` quit
+
+These work identically on Windows, macOS, and Linux.
 
 ## Data & config location
 
